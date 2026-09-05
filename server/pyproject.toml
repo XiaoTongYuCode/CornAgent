@@ -1,0 +1,45 @@
+[project]
+name = "cornagent-server"
+version = "0.1.0"
+description = "Durable open-source web agent API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.35,<2",
+    "alembic>=1.14.0,<2.0.0",
+    "fastapi>=0.115.0,<1.0.0",
+    "httpx>=0.27.0,<1.0.0",
+    "litellm<=1.82.6",
+    "markitdown[pdf]>=0.1.7,<0.2.0",
+    "pillow>=11.3.0,<13.0.0",
+    "psycopg[binary]>=3.2.0,<4.0.0",
+    "pydantic>=2.11.0,<3.0.0",
+    "pydantic-settings>=2.0.0,<3.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "redis>=5.2.0,<7.0.0",
+    "sqlalchemy>=2.0.0,<3.0.0",
+    "uvicorn[standard]>=0.30.0,<1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "ruff>=0.11",
+]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

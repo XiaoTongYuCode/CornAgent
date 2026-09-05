@@ -1,0 +1,8 @@
+/* Transitions.dev Text states swap: up/out, then down/in (150ms per phase). */
+.text-swap { position: relative; display: inline-block; min-width: 0; max-width: 100%; }
+.text-swap__visual { display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden; text-overflow: inherit; }
+.text-swap__measure,
+.text-swap__frame { grid-area: 1 / 1; min-width: 0; overflow: hidden; text-overflow: inherit; }
+.text-swap__measure { visibility: hidden; }
+.text-swap__measure::before { content: attr(data-text); }
+.text-swap__frame > .shimmer-text { display: block; overflow: hidden; text-overflow: inherit; }

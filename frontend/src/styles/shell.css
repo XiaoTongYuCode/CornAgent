@@ -1,0 +1,48 @@
+.cornagent-shell { --app-header-height: 50px; --nav-item-height: 32px; --sidebar-width: 238px; --sidebar-layout-width: var(--sidebar-width); height: 100%; display: grid; grid-template-columns: var(--sidebar-layout-width) minmax(0, 1fr); background: var(--bg); color: var(--text); }
+.cornagent-shell.sidebar-collapsed { --sidebar-layout-width: 0px; }
+.cornagent-shell:has(> .agent-drawer[data-layout-open="true"]) { grid-template-columns: var(--sidebar-layout-width) minmax(0, 1fr) auto; }
+.sidebar-header { position: relative; display: flex; align-items: center; flex: 0 0 var(--app-header-height); min-height: var(--app-header-height); padding: 0 100px 0 12px; border-bottom: 1px solid var(--border); }
+.sidebar-brand { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text); }
+.sidebar-brand-icon { width: 24px; height: 24px; flex: 0 0 24px; background: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; }
+.sidebar-title { overflow: hidden; color: var(--text); font-size: 13px; font-weight: 600; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-header-actions { top: 50%; right: 8px; transform: translateY(-50%); }
+.sidebar-header-icon-button:hover { background: var(--control-hover); }
+.sidebar .nav-scroll { padding-top: 12px; }
+.nav-chat-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-chat-row { display: flex; align-items: center; min-width: 0; flex: 0 0 var(--nav-item-height); border-radius: 9px; }
+.nav-chat-row:hover, .nav-chat-row:focus-within { background: var(--control-hover); }
+.nav-chat-row.active { background: var(--surface-emphasis); }
+.nav-chat-row > .nav-item { min-width: 0; flex: 1; }
+.nav-chat-row > .nav-item:hover, .nav-chat-row > .nav-item.active { background: transparent; }
+.nav-chat-actions { display: grid; place-items: center; width: var(--nav-item-height); height: var(--nav-item-height); flex: 0 0 var(--nav-item-height); padding: 0; border-radius: 7px; color: var(--muted); opacity: 0; }
+.sidebar .nav-item, .sidebar .nav-section-heading, .sidebar .nav-section-toggle, .sidebar .nav-actions button { height: var(--nav-item-height); min-height: var(--nav-item-height); }
+.sidebar .chat-session-nav-list > .nav-item { flex-basis: var(--nav-item-height); }
+.nav-chat-row:hover .nav-chat-actions, .nav-chat-row:focus-within .nav-chat-actions, .nav-chat-actions[aria-expanded="true"] { opacity: 1; }
+.nav-chat-actions:hover { color: var(--text); background: var(--control-hover); }
+.nav-chat-empty { padding: 5px 8px 5px 26px; color: var(--muted); font-size: 12px; }
+.nav-section-content[hidden] { display: none; }
+.mobile-navigation-toggle, .mobile-sidebar-backdrop { display: none; }
+.sidebar-collapsed .cornagent-main > .agent-chat-page > .topbar, .sidebar-collapsed .cornagent-main > .topbar { padding-left: 52px; }
+.cornagent-main { min-width: 0; min-height: 0; height: 100%; overflow: auto; }
+.topbar { height: var(--app-header-height); padding: 0 24px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--border); background: var(--topbar); }
+.topbar strong { font-size: 14px; font-weight: 500; }
+.cornagent-example { max-width: 800px; margin: 100px auto; padding: 0 clamp(20px, 4vw, 48px); }
+.cornagent-example h1 { font-size: clamp(24px, 3vw, 34px); letter-spacing: -1px; margin: 20px 0; font-weight: 500; }
+.workspace-loading { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); }
+.form-error { color: #db4545; padding-top: 12px; }
+
+@media (max-width: 864px) {
+  .cornagent-shell, .cornagent-shell:has(> .agent-drawer[data-layout-open="true"]) { grid-template-columns: minmax(0, 1fr); }
+  .cornagent-shell > .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 510; max-width: calc(100vw - 48px); transform: translateX(-100%); visibility: hidden; pointer-events: none; }
+  .cornagent-shell[data-mobile-sidebar-open="true"] > .sidebar { transform: translateX(0); visibility: visible; pointer-events: auto; box-shadow: 12px 0 40px #0002; }
+  .sidebar-resize-handle, .desktop-sidebar-collapse { display: none; }
+  .mobile-sidebar-close { display: grid; }
+  .mobile-navigation-toggle { position: fixed; display: grid; place-items: center; z-index: 90; top: 9px; left: 8px; width: 36px; height: 36px; color: var(--muted); border-radius: 8px; }
+  .mobile-navigation-toggle:hover { background: var(--control-hover); }
+  .mobile-sidebar-backdrop { position: fixed; inset: 0; display: block; z-index: 500; background: #0005; }
+  .cornagent-main > .agent-chat-page > .topbar, .cornagent-main > .topbar { padding-left: 52px; }
+  .cornagent-example { margin: 48px auto; padding: 0 24px; }
+  .cornagent-shell > .agent-drawer { position: fixed; inset: 0 0 0 auto; z-index: 320; max-width: 100vw; min-width: 0; }
+}
+@media (hover: none) { .nav-actions, .nav-chat-actions { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sidebar, .navigation-menu-icon path, .nav-section-caret, .sidebar-header-icon-button { transition: none; } }

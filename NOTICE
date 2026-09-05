@@ -1,0 +1,9 @@
+CornAgent
+
+本项目采用 MIT 许可证，详见 LICENSE。
+第三方依赖保留各自的许可证与版权声明，使用及分发时请遵循相应条款。
+
+子任务编排协议、参数校验、提示词、结果/等待规则，以及前端任务分组与图标配色，
+由 EigenLogic 的 agent_server / agent_web 归档版本移植和改编：
+1c934f0d6ed2970f7a36eac463ab08897f071523。
+具体来源、改编范围和运行边界见 docs/subagents.md。运行时不依赖 EigenLogic。

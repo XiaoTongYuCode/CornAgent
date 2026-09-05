@@ -1,0 +1,5 @@
+.article-skeleton { display: flex; flex-direction: column; gap: 28px; margin-top: 30px; }
+.article-skeleton .ant-skeleton { min-width: 0; }
+.article-skeleton .ant-skeleton-paragraph { padding: 0; }
+.article-skeleton .article-skeleton__cover { display: block; width: 100%; height: clamp(120px, 22vw, 250px); overflow: hidden; border-radius: 10px; }
+.article-skeleton .ant-skeleton-title, .article-skeleton .ant-skeleton-paragraph > li { max-width: 100%; }
