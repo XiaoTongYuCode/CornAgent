@@ -19,7 +19,7 @@ npm test
 npm run build
 ```
 
-构建后 FastAPI 可以同源托管 `dist`，无需额外 BFF。
+构建后 FastAPI 可以同源托管 `dist`，无需额外 BFF。直接依赖的用途、已清理项和后续体积优化方向见 [依赖分析](../docs/dependencies.md)。
 
 从左侧“Agent 渲染效果”进入 `/rendering` 可反复测试 `MarkdownMessageContent`。演示区只展示 Agent 消息内容及测试控制按钮，复用正式消息渲染器，支持思考、工具标题流光、工具组、流式正文、边界切换、停止/重置、390px 窄栏与主题/语言切换。`src/previews/messagePreviewScript.ts` 定义演示阶段：工具运行标题保持数秒后切换为完成态，后置工具留在正文下方，新正文到达时触发收起。所有内容均为合成数据，不调用模型或修改会话。页面使用应用共享导航和 Provider，随前端一起构建，可直接访问和刷新。
 
