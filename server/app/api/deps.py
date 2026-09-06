@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
+from ipaddress import IPv6Address, ip_address
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -15,6 +16,23 @@ def get_db(request: Request) -> Iterator[Session]:
 
 def get_scope() -> Identity:
     return LOCAL_SCOPE
+
+
+def get_run_rate_limit_identity(request: Request) -> Identity:
+    """Use the ASGI client address only for admission, never for storage ownership.
+
+    Trusted proxy processing belongs to the ASGI server. Reading forwarded headers
+    here would let direct clients choose their own rate-limit bucket.
+    """
+    try:
+        address = ip_address(request.client.host if request.client else "")
+        if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        user_id = str(address)
+    except ValueError:
+        # Missing/invalid transport addresses share a bounded bucket.
+        user_id = "unknown"
+    return Identity(user_id=f"ip:{user_id}", tenant_id=LOCAL_SCOPE.tenant_id)
 
 
 @dataclass(frozen=True, slots=True)

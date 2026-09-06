@@ -56,11 +56,11 @@ def settings(tmp_path):
 @pytest.fixture
 def client_factory(settings):
     @contextmanager
-    def factory(model=None, stream=None):
+    def factory(model=None, stream=None, *, client_address=("127.0.0.1", 50000)):
         if not settings.redis_url and stream is None:
             stream = FakeAgentEventStream()
         app = create_app(settings, model_client=model or FinalAgentModel(), event_stream=stream)
-        with TestClient(app) as client:
+        with TestClient(app, client=client_address) as client:
             yield client
 
     return factory

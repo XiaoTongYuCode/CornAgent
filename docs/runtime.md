@@ -37,6 +37,19 @@ Message 使用 parent_message_id、version_group_id、supersedes_message_id 保�
 所有可变运行操作要求 Idempotency-Key；新会话首次提交为原子事务，一个 Session 同时最多一个活跃 Run。
 停止生成与忽略问题不同：前者取消整个 Run，后者继续当前 Run。
 
+## 新 Run 的 IP 限流
+
+没有账户系统时，仅在新 Run 准入检查中使用客户端 IP 作为 user 标识；数据库、历史记录和 SSE 仍使用固定共享工作区。
+新建会话、发送消息、重新生成和编辑消息共享每 IP 默认 **6 次/60 秒** 的配额（`CORNAGENT_AGENT_USER_RUNS_PER_MINUTE`）。
+窗口从首次准入请求开始计时，60 秒后重置；超额返回 HTTP 429、`agent_run_rate_limited` 和 `retry_after_seconds`。
+幂等重放不重复扣配额；回答或忽略提问恢复原 Run，不消耗新 Run 配额。通过幂等预检后的新 Run 尝试会计数，即使后续创建失败。
+共享 tenant 仍有默认 60 次/60 秒的全站上限，实例执行并发与 SSE 连接上限维持原配置。
+
+IP 来自 ASGI `request.client`，应用不自行信任 `X-Forwarded-For`、`X-Real-IP` 等请求头。
+由 ASGI 服务配置可信代理并解析客户端地址；IPv6 规范化，IPv4 映射地址归入对应 IPv4 配额，缺失或非法地址归入统一受限桶。
+同一公网出口的访问者共享配额。IP 仅用于限流，不提供登录或数据隔离。
+配置 Redis 时以哈希键和原子计数跨实例共享配额；Redis 故障返回 503。未配置 Redis 时仅在单进程内计数。
+
 运行器支持 provider retry、DeepSeek 503 fallback、上下文压缩、3 MiB checkpoint 限制、stream batching、并发控制与指标。
 系统提示词独立在 `app/agent/prompt.py`，模型与所有预算由 `Settings` 配置。
 

@@ -43,4 +43,9 @@
 
 当前部署使用现有的单一共享作用域，未增加账户系统或工作区隔离。Vercel 会回收空闲实例并限制请求时长，因此长任务和断线后的后台任务不能保证持续执行或立即恢复；数据库中的历史记录仍可在后续请求中读取。
 
+新 Run 按客户端 IP 限流，默认每 IP 6 次/60 秒，使用共享 Redis 在各实例间计数，详见[运行时限流](runtime.md#新-run-的-ip-限流)。
+Vercel 容器入口的 Uvicorn 已启用 `--proxy-headers --forwarded-allow-ips '*'`，将平台覆盖写入的 `X-Forwarded-For` 转为 ASGI 客户端地址；应用据此生成限流身份。
+该入口只应由 Vercel 网关访问；自托管时必须将可信代理限制为实际代理 IP，不可向公网直连入口照搬通配信任。
+Vercel 的请求头覆盖规则见[官方请求头说明](https://vercel.com/docs/headers/request-headers#x-forwarded-for)。
+
 参考：[Vercel Container Images](https://vercel.com/docs/functions/container-images)、[LiteLLM OpenRouter](https://docs.litellm.ai/docs/providers/openrouter)。

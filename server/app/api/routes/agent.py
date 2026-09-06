@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
-from app.api.deps import CurrentIdentity, Db, StreamIdentity
+from app.api.deps import CurrentIdentity, Db, StreamIdentity, get_run_rate_limit_identity
 from app.api.routes._common import IdempotencyKey, require_idempotency_key
 from app.persistence.agent_runtime import TERMINAL_RUN_STATUSES, AgentRepository
 from app.persistence.agent_schemas import (
@@ -123,7 +123,7 @@ async def create_agent_session_run(
             runtime.kick(run.id)
         return AgentSessionRunOut(session=session, run=run)
     db.rollback()
-    await request.app.state.agent_run_rate_limiter.require(identity)
+    await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
     verified_context = await runtime.verify_source_context(identity, payload.context)
     session, run = repository.create_session_run(
         identity,
@@ -188,7 +188,7 @@ async def create_agent_run(
     if replay is not None:
         return replay
     db.rollback()
-    await request.app.state.agent_run_rate_limiter.require(identity)
+    await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
     run = repository.create_run(
         identity,
         session_id,
@@ -222,7 +222,7 @@ async def regenerate_agent_message(
     if replay is not None:
         return replay
     db.rollback()
-    await request.app.state.agent_run_rate_limiter.require(identity)
+    await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
     run = repository.regenerate(identity, message_id, key)
     if run.status == "pending":
         runtime.kick(run.id)
@@ -257,7 +257,7 @@ async def edit_agent_message(
     if replay is not None:
         return replay
     db.rollback()
-    await request.app.state.agent_run_rate_limiter.require(identity)
+    await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
     run = repository.edit_user_message(
         identity,
         message_id,
@@ -307,7 +307,6 @@ async def respond_to_agent_question(
         runtime.kick(replay.run_id)
         return replay
     db.rollback()
-    await request.app.state.agent_run_rate_limiter.require(identity)
     result, event = repository.respond_question(
         identity,
         question_id,
