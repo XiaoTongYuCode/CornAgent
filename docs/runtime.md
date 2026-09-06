@@ -15,6 +15,9 @@ pending → running → completed / failed / cancelled
 
 `ask_user` 必须独占工具轮次。问题、canonical options、tool_call_id 与 continuation 同事务入库后释放租约。
 回答/忽略按原始 tool_call_id 形成标准 tool message，原 Run 回到 pending、epoch 增加。问题没有自动超时。
+五个子任务编排工具同样独占工具轮次。模型把独占工具与其他工具混入同一批次时，
+运行时不会执行其中任何工具，而是持久化标准失败 tool result 并允许模型纠正一次；
+同一 Run 再次返回非法独占批次时以 `invalid_agent_tool_batch` 失败，避免无限重试或重复副作用。
 
 SSE 事件格式：
 

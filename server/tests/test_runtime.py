@@ -98,12 +98,27 @@ class FakeAgentEventStream:
 
 
 class MixedToolAgentModel:
-    async def stream(self, _messages: list[dict[str, Any]]) -> AsyncIterator[ModelStreamEvent]:
+    def __init__(self) -> None:
+        self.requests: list[list[dict[str, Any]]] = []
+
+    async def stream(self, messages: list[dict[str, Any]]) -> AsyncIterator[ModelStreamEvent]:
+        self.requests.append([dict(message) for message in messages])
+        if any(
+            message.get("role") == "tool"
+            and "ExclusiveToolBatch" in str(message.get("content") or "")
+            for message in messages
+        ):
+            yield ModelStreamEvent(kind="content", content="已按独占规则调整。")
+            return
         yield ModelStreamEvent(
             kind="tool_calls",
             tool_calls=[
-                {"id": "call-ask", "name": "ask_user", "arguments": "{}"},
-                {"id": "call-other", "name": "future_action", "arguments": "{}"},
+                {"id": "call-list", "name": "list_subagents", "arguments": "{}"},
+                {
+                    "id": "call-search",
+                    "name": "mock_web_search",
+                    "arguments": '{"query":"测试工具","max_results":1}',
+                },
             ],
         )
 

@@ -89,12 +89,13 @@ def build_subagent_orchestration_tools() -> list[ToolDefinition]:
         ToolDefinition(
             name=LIST_SUBAGENTS_TOOL_NAME,
             description=(
-                "读取当前 Root run 的子 Agent 状态；默认返回全部"
+                "仅在当前 Root run 已通过 spawn_subagents 或 delegate_tasks 创建子任务后，"
+                "读取这些子 Agent 的状态；不要用本工具探测工具是否可用或演示普通工具。默认返回全部"
                 "，也可按 group_id 或 task_ids 过滤。"
                 "每项只返回标题、状态、耗时、结果是否可收集、稳定错误码和有限摘要；"
                 "不会返回完整 evidence，完整结果必须另用 collect_"
                 "subagent_results。不会等待或轮询。"
-                "该编排工具必须单独调用。"
+                "该编排工具必须单独调用；若还需要普通工具，先完成普通工具轮次，再单独调用本工具。"
             ),
             parameters=_filter_parameters(),
             handler=_runtime_only,

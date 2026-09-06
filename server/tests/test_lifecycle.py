@@ -13,7 +13,12 @@ from app.persistence.agent_runtime import AgentRepository
 from app.persistence.errors import DomainError
 from app.persistence.models import AgentMessage, AgentQuestion, AgentRun, AgentSession
 from app.persistence.scope import LOCAL_SCOPE
-from tests.test_runtime import FailingAgentEventStream, FakeAgentModel, FinalAgentModel
+from tests.test_runtime import (
+    FailingAgentEventStream,
+    FakeAgentModel,
+    FinalAgentModel,
+    MixedToolAgentModel,
+)
 
 
 def post(client, path, payload=None, key=None):
@@ -213,3 +218,28 @@ def test_exact_tool_catalog_and_no_auth_routes(client_factory):
             ).status_code
             == 403
         )
+
+
+def test_mixed_exclusive_tool_batch_gets_one_safe_model_correction(client_factory):
+    model = MixedToolAgentModel()
+    with client_factory(model) as client:
+        created = start(client, "测试工具")
+        detail = wait_run(client, created["session"]["id"])
+
+    answer = detail["messages"][-1]
+    assert answer["markdown"] == "已按独占规则调整。"
+    assert answer["run"]["status"] == "completed"
+    assert len(model.requests) == 2
+    correction_messages = [
+        message for message in model.requests[1] if message.get("role") == "tool"
+    ]
+    assert len(correction_messages) == 2
+    assert all(
+        json.loads(message["content"])["error"]["type"] == "ExclusiveToolBatch"
+        for message in correction_messages
+    )
+    assert all(
+        part["metadata"].get("status") == "failed"
+        for part in answer["content_parts"]
+        if part["kind"] == "tool_call"
+    )

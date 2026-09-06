@@ -706,12 +706,81 @@ class AgentRuntime:
         requires_exclusive_round = any(
             definition.exclusive for definition in definitions if definition is not None
         )
-        if has_invalid_call or (requires_exclusive_round and len(normalized) != 1):
-            exclusive_names = [
-                definition.name
-                for definition in definitions
-                if definition is not None and definition.exclusive
-            ]
+        exclusive_names = [
+            definition.name
+            for definition in definitions
+            if definition is not None and definition.exclusive
+        ]
+        invalid_exclusive_batch = requires_exclusive_round and len(normalized) != 1
+        if (
+            invalid_exclusive_batch
+            and not has_invalid_call
+            and not self._has_exclusive_batch_correction(provider_messages)
+        ):
+            correction = {
+                "ok": False,
+                "error": {
+                    "type": "ExclusiveToolBatch",
+                    "message": (
+                        f"{', '.join(exclusive_names)} must be the only tool call in its model "
+                        "round. No tools were executed. Retry with the exclusive tool alone, or "
+                        "call ordinary tools in a separate round."
+                    ),
+                },
+            }
+            serialized_correction = self._serialize_tool_result(correction)
+            assistant_message = self._assistant_tool_call_message(
+                round_content=round_content,
+                round_reasoning=round_reasoning,
+                tool_calls=normalized,
+            )
+            parts: list[dict[str, Any]] = []
+            tool_messages: list[dict[str, Any]] = []
+            for call, definition in zip(normalized, definitions, strict=True):
+                assert definition is not None
+                try:
+                    arguments = self._parse_tool_arguments(call["function"]["arguments"])
+                except DomainError:
+                    arguments = None
+                status = definition.build_status(arguments or {})
+                parts.append(
+                    self._tool_call_part(
+                        call=call,
+                        title=self._finalize_tool_title(
+                            status.get("status") or "工具调用",
+                            failed=True,
+                        ),
+                        content=correction["error"]["message"],
+                        status="failed",
+                        arguments=arguments,
+                        result=correction,
+                        failed=True,
+                    )
+                )
+                tool_messages.append(
+                    {
+                        "role": "tool",
+                        "name": definition.name,
+                        "tool_call_id": call["id"],
+                        "content": serialized_correction,
+                    }
+                )
+            next_messages = [*provider_messages, assistant_message, *tool_messages]
+            events = await self._db(
+                lambda repo: repo.persist_tool_call_parts(
+                    run_id,
+                    self.worker_id,
+                    fence,
+                    parts=parts,
+                    usage=usage,
+                    provider_messages=next_messages,
+                    advance_safe_checkpoint=True,
+                )
+            )
+            for event in events:
+                await self._publish(run_id, event)
+            return next_messages
+        if has_invalid_call or invalid_exclusive_batch:
             event = await self._db(
                 lambda repo: repo.record_tool_calls(
                     run_id, self.worker_id, fence, normalized, usage
@@ -901,6 +970,23 @@ class AgentRuntime:
         for event in completed_events:
             await self._publish(run_id, event)
         return next_messages
+
+    @staticmethod
+    def _has_exclusive_batch_correction(messages: list[dict[str, Any]]) -> bool:
+        for message in reversed(messages):
+            if message.get("role") != "tool":
+                continue
+            try:
+                content = json.loads(str(message.get("content") or ""))
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(content, Mapping)
+                and isinstance(content.get("error"), Mapping)
+                and content["error"].get("type") == "ExclusiveToolBatch"
+            ):
+                return True
+        return False
 
     @staticmethod
     def _parse_tool_arguments(raw_arguments: str) -> dict[str, Any]:
