@@ -12,3 +12,4 @@
 **/.data/
 **/.coverage
 .DS_Store
+.vercel/

@@ -1,0 +1,15 @@
+.git
+.vercel
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.env
+**/.env.*
+**/.data
+**/dist
+**/.vite
+**/*.tsbuildinfo
+**/.coverage
+**/.DS_Store

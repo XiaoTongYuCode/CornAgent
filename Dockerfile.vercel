@@ -1,0 +1,30 @@
+FROM node:24-bookworm-slim AS frontend
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+COPY assets/ /build/assets/
+RUN npm run build
+
+FROM python:3.12-slim-bookworm
+COPY --from=ghcr.io/astral-sh/uv:0.11.8 /uv /usr/local/bin/uv
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_NO_CACHE=1 \
+    LITELLM_LOCAL_MODEL_COST_MAP=true \
+    CORNAGENT_ENVIRONMENT=production \
+    CORNAGENT_SERVER_RELOAD=false \
+    CORNAGENT_FRONTEND_DIST=/app/frontend/dist \
+    CORNAGENT_FILE_STORE_PATH=/tmp/cornagent/files \
+    CORNAGENT_AGENT_FILE_INPUT_ENABLED=false
+WORKDIR /app/server
+COPY server/pyproject.toml server/uv.lock server/README.md ./
+RUN uv export --locked --no-dev --no-emit-project -o /tmp/requirements.txt \
+    && uv pip sync --system --require-hashes --compile-bytecode /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
+COPY server/ ./
+RUN python3 -m compileall -q app vercel_entrypoint.py \
+    && python3 -c "from app.main import create_app; from vercel_entrypoint import app"
+COPY --from=frontend /build/frontend/dist /app/frontend/dist
+EXPOSE 80
+CMD ["python3", "-m", "uvicorn", "--app-dir", "/app/server", "vercel_entrypoint:app", "--host", "0.0.0.0", "--port", "80", "--proxy-headers", "--forwarded-allow-ips", "*"]
