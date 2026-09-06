@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useI18n } from '../i18n'
 import { CollapsedSidebarPreview } from './CollapsedSidebarPreview'
 import { SidebarResizeHandle } from './SidebarResizeHandle'
+import { SidebarCredit } from './sidebar/SidebarCredit'
 import { SidebarHeader } from './sidebar/SidebarHeader'
 import { SidebarNavigation, type SidebarNavigationProps } from './sidebar/SidebarNavigation'
 
@@ -77,6 +78,7 @@ export function Sidebar({
             onCloseMobile={onCloseMobile}
           />
           <SidebarNavigation {...navigation} />
+          <SidebarCredit />
         </aside>
       )}
     </CollapsedSidebarPreview>

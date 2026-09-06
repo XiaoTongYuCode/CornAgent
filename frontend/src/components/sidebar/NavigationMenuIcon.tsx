@@ -1,18 +1,10 @@
-import collapseIconMarkup from '../../assets/svg/menu.svg?raw'
-import expandIconMarkup from '../../assets/svg/menu-right.svg?raw'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 
 interface NavigationMenuIconProps {
   variant: 'collapse' | 'expand'
 }
 
 export function NavigationMenuIcon({ variant }: NavigationMenuIconProps) {
-  const iconMarkup = variant === 'collapse' ? collapseIconMarkup : expandIconMarkup
-
-  return (
-    <span
-      className={`navigation-menu-icon navigation-menu-icon-${variant}`}
-      aria-hidden="true"
-      dangerouslySetInnerHTML={{ __html: iconMarkup }}
-    />
-  )
+  const Icon = variant === 'collapse' ? PanelLeftClose : PanelLeftOpen
+  return <Icon className="navigation-menu-icon" size={16} strokeWidth={1.75} aria-hidden="true" />
 }

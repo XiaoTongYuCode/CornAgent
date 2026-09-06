@@ -18,7 +18,7 @@ export const messages = {
 
   navigation: ['主导航', 'Main navigation'],
   home: ['首页', 'Home'],
-  creatorCredit: ['power by xiaotongyu.com', 'power by xiaotongyu.com'],
+  creatorCredit: ['Made by xiaotongyu.com', 'Made by xiaotongyu.com'],
   creatorCelebration: ['点击放烟花', 'Celebrate with confetti'],
   chats: ['聊天', 'Chats'],
   chatActions: ['管理“{title}”', 'Manage “{title}”'],

@@ -4,7 +4,6 @@ import { AgentHistoryPicker } from './AgentHistoryPicker'
 import { AgentSessionActionsMenu } from './AgentSessionActionsMenu'
 import { useI18n } from '../i18n'
 import type { AgentWorkspace } from './useAgentWorkspace'
-import { HomeCredit } from '../components/HomeCredit'
 
 interface AgentChatPageProps {
   sessionId: string | null
@@ -32,7 +31,7 @@ export function AgentChatPage({ sessionId, userName, workspace, onSessionChange 
     onSessionChange(null)
   }
 
-  return <div className={`agent-chat-page${sessionId === null ? ' agent-chat-page--home' : ''}`} data-testid="agent-chat-page">
+  return <div className="agent-chat-page" data-testid="agent-chat-page">
     <header className="topbar agent-chat-header">
       <strong>{sessionId === null ? t('newChat') : currentSession?.title ?? t('openingChat')}</strong>
       <span className="spacer" />
@@ -63,6 +62,5 @@ export function AgentChatPage({ sessionId, userName, workspace, onSessionChange 
     {sessionId !== null && !currentSession && workspace.available !== false && !workspace.error
       ? <div className="workspace-loading" role="status"><span className="spinner" />{t('openingChat')}</div>
       : <AgentConversation focusPrompt={focusPrompt} onSessionChange={onSessionChange} userName={userName} workspace={workspace} />}
-    {sessionId === null && <HomeCredit />}
   </div>
 }

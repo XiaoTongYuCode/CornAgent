@@ -45,4 +45,4 @@
   .cornagent-shell > .agent-drawer { position: fixed; inset: 0 0 0 auto; z-index: 320; max-width: 100vw; min-width: 0; }
 }
 @media (hover: none) { .nav-actions, .nav-chat-actions { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .sidebar, .navigation-menu-icon path, .nav-section-caret, .sidebar-header-icon-button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .sidebar, .nav-section-caret, .sidebar-header-icon-button { transition: none; } }

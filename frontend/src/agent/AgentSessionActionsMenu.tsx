@@ -1,5 +1,4 @@
-import { DotsThree } from '@phosphor-icons/react'
-import { Trash2 } from 'lucide-react'
+import { Ellipsis, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { apiErrorMessage } from '../api/transport'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -111,7 +110,7 @@ export function AgentSessionActionsMenu({ disabled, disabledReason, sessionTitle
       disabled={disabled}
       title={disabled ? disabledReason : triggerLabel ?? text('更多操作', 'More actions')}
       onClick={openMenu}
-    ><DotsThree size={16} aria-hidden /></button>
+    ><Ellipsis size={16} strokeWidth={1.75} aria-hidden /></button>
     {renderMenu && <FloatingMenuPortal
       getAnchor={() => triggerRef.current}
       menuRef={menuRef}
@@ -124,7 +123,7 @@ export function AgentSessionActionsMenu({ disabled, disabledReason, sessionTitle
         <button type="button" className="menu-row danger" role="menuitem" onClick={() => {
           requestClose(false)
           setConfirmOpen(true)
-        }}><Trash2 size={16} aria-hidden />{text('删除会话', 'Delete conversation')}</button>
+        }}><Trash2 size={16} strokeWidth={1.75} aria-hidden />{text('删除会话', 'Delete conversation')}</button>
       </div>
     </FloatingMenuPortal>}
     {confirmOpen && <ConfirmDialog

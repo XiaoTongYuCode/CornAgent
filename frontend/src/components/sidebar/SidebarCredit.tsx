@@ -1,6 +1,6 @@
 import confetti from 'canvas-confetti'
 import type { MouseEvent } from 'react'
-import { useI18n } from '../i18n'
+import { useI18n } from '../../i18n'
 
 function celebrate(event: MouseEvent<HTMLButtonElement>) {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -21,11 +21,11 @@ function celebrate(event: MouseEvent<HTMLButtonElement>) {
   void confetti({ ...options, particleCount: 45, spread: 130, startVelocity: 25, decay: 0.92, scalar: 0.8 })
 }
 
-export function HomeCredit() {
+export function SidebarCredit() {
   const { t } = useI18n()
   return (
-    <footer className="home-credit">
-      <button type="button" className="home-credit-button" title={t('creatorCelebration')} onClick={celebrate}>
+    <footer className="sidebar-credit">
+      <button type="button" className="sidebar-credit-button" title={t('creatorCelebration')} onClick={celebrate}>
         {t('creatorCredit')}
       </button>
     </footer>

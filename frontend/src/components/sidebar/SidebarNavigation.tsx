@@ -1,5 +1,4 @@
-import { CaretDown, ChatsCircle, House } from '@phosphor-icons/react'
-import { PanelRight, PlaySquare, Plus } from 'lucide-react'
+import { ChevronDown, House, MessagesSquare, PanelRight, Plus, SquarePlay } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AgentSession } from '../../agent/types'
 import { AgentSessionActionsMenu } from '../../agent/AgentSessionActionsMenu'
@@ -72,21 +71,21 @@ export function SidebarNavigation({
         <SidebarNavItem
           active={home}
           onClick={onHome}
-          icon={<House size={16} weight="regular" aria-hidden="true" />}
+          icon={<House size={16} strokeWidth={1.75} aria-hidden="true" />}
         >
           {t('home')}
         </SidebarNavItem>
         <SidebarNavItem
           active={example}
           onClick={onExample}
-          icon={<PanelRight size={16} aria-hidden="true" />}
+          icon={<PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />}
         >
           {t('sidebarExample')}
         </SidebarNavItem>
         <SidebarNavItem
           active={renderingPreview}
           onClick={onRenderingPreview}
-          icon={<PlaySquare size={16} aria-hidden="true" />}
+          icon={<SquarePlay size={16} strokeWidth={1.75} aria-hidden="true" />}
         >
           {t('agentRendering')}
         </SidebarNavItem>
@@ -100,9 +99,10 @@ export function SidebarNavigation({
             aria-controls="sidebar-chat-navigation"
             onClick={() => setChatsOpen((open) => !open)}
           >
-            <CaretDown
+            <ChevronDown
               className={chatsOpen ? 'nav-section-caret open' : 'nav-section-caret'}
               size={12}
+              strokeWidth={1.75}
               aria-hidden="true"
             />
             <span>{t('chats')}</span>
@@ -114,7 +114,7 @@ export function SidebarNavigation({
               title={t('newChat')}
               onClick={onNewChat}
             >
-              <Plus size={14} aria-hidden="true" />
+              <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
             </button>
           </span>
         </div>
@@ -129,7 +129,7 @@ export function SidebarNavigation({
                   active={session.id === currentSessionId}
                   onClick={() => onOpenChat(session.id)}
                   title={session.title}
-                  icon={<ChatsCircle size={16} aria-hidden="true" />}
+                  icon={<MessagesSquare size={16} strokeWidth={1.75} aria-hidden="true" />}
                 >
                   {session.title}
                 </SidebarNavItem>

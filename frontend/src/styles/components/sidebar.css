@@ -25,19 +25,7 @@
 .desktop-navigation-toggle { position: fixed; top: 12px; left: 12px; z-index: 85; width: 24px; height: 24px; place-items: center; color: var(--muted);}
 .sidebar-collapsed .desktop-navigation-toggle { display: grid;}
 .desktop-navigation-toggle:hover { color: var(--text);}
-.navigation-menu-icon { display: block; width: 18px; height: 18px; pointer-events: none; line-height: 0;}
-.navigation-menu-icon > svg { display: block; width: 18px; height: 18px; overflow: visible;}
-.navigation-menu-icon path { fill: currentColor; transform-box: fill-box; transform-origin: center;}
-.navigation-menu-icon path:not(:first-of-type) { transition: transform .2s ease, opacity .12s ease;}
-.navigation-menu-icon-collapse path:nth-of-type(5), .navigation-menu-icon-expand path:nth-of-type(3) { transition: transform .2s ease, opacity .2s ease;}
-.navigation-menu-icon-collapse path:nth-of-type(5) { opacity: 0; transform: translateX(6px);}
-.desktop-sidebar-collapse:hover .navigation-menu-icon-collapse path:nth-of-type(2), .desktop-sidebar-collapse:focus-visible .navigation-menu-icon-collapse path:nth-of-type(2) { opacity: 0; transform: translateX(-6px) scale(.9);}
-.desktop-sidebar-collapse:hover .navigation-menu-icon-collapse path:nth-of-type(3), .desktop-sidebar-collapse:hover .navigation-menu-icon-collapse path:nth-of-type(4), .desktop-sidebar-collapse:focus-visible .navigation-menu-icon-collapse path:nth-of-type(3), .desktop-sidebar-collapse:focus-visible .navigation-menu-icon-collapse path:nth-of-type(4) { opacity: 0; transform: translateX(-4px);}
-.desktop-sidebar-collapse:hover .navigation-menu-icon-collapse path:nth-of-type(5), .desktop-sidebar-collapse:focus-visible .navigation-menu-icon-collapse path:nth-of-type(5) { opacity: 1; transform: translateX(0);}
-.navigation-menu-icon-expand path:nth-of-type(2) { opacity: 0; transform: translateX(-6px) scale(.9);}
-.navigation-menu-icon-expand path:nth-of-type(3) { transform: translateX(-6px);}
-.navigation-menu-icon-expand path:nth-of-type(4), .navigation-menu-icon-expand path:nth-of-type(5) { opacity: 0; transform: translateX(-4px);}
-.desktop-navigation-toggle:hover .navigation-menu-icon-expand path:not(:first-of-type), .desktop-navigation-toggle:focus-visible .navigation-menu-icon-expand path:not(:first-of-type) { opacity: 1; transform: translateX(0) scale(1);}
+.navigation-menu-icon { display: block; pointer-events: none; }
 .sidebar-header-actions { position: absolute; top: 10px; right: 8px; display: flex; align-items: center; gap: 2px;}
 .sidebar-header-icon-button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); transition: color .16s ease, background-color .16s ease, transform .16s ease;}
 .sidebar-header-icon-button:hover { color: var(--text); background: rgba(255, 255, 255, .04);}
@@ -82,3 +70,8 @@
   text-align: left;}
 .nav-chat-load-more:hover,
 .nav-chat-load-more:focus-visible { color: var(--text);}
+
+.sidebar-credit { flex: 0 0 auto; display: flex; justify-content: center; padding: 8px 8px max(12px, env(safe-area-inset-bottom)); }
+.sidebar-credit-button { max-width: 100%; padding: 8px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 18px; white-space: nowrap; cursor: pointer; }
+.sidebar-credit-button:hover { color: var(--text); }
+.sidebar-credit-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
