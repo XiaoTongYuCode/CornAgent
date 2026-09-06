@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n'
-import { ChatsCircle, ClockCounterClockwise } from '@phosphor-icons/react'
+import { MessagesSquare, History } from 'lucide-react'
 
 import { AttioSearchSelectPopover } from '../components/primitives/AttioSearchSelectPopover'
 import type { AgentSession, AgentSessionPage } from './types'
@@ -30,7 +30,7 @@ export function AgentHistoryPicker({
     ariaLabel={t('searchHistory')}
     disabled={disabled}
     emptyText={t('noMatchingChats')}
-    icon={<ClockCounterClockwise size={16} aria-hidden="true" />}
+    icon={<History size={16} strokeWidth={1.75} aria-hidden="true" />}
     multiple={false}
     loadingMoreOptions={loadingMore}
     loadingText={t('loading')}
@@ -42,7 +42,7 @@ export function AgentHistoryPicker({
     options={sessions.map((session) => ({
       value: session.id,
       label: session.title,
-      icon: <ChatsCircle size={16} aria-hidden="true" />,
+      icon: <MessagesSquare size={16} strokeWidth={1.75} aria-hidden="true" />,
     }))}
     optionsNextCursor={nextCursor}
     popupClassName="agent-history-popover"
@@ -53,7 +53,7 @@ export function AgentHistoryPicker({
         data: page.data.map((item) => ({
           value: item.id,
           label: item.title,
-          icon: <ChatsCircle size={16} aria-hidden="true" />,
+          icon: <MessagesSquare size={16} strokeWidth={1.75} aria-hidden="true" />,
         })),
         nextCursor: page.nextCursor,
       }

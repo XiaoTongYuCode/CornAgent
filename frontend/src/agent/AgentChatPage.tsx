@@ -1,4 +1,4 @@
-import { Plus } from '@phosphor-icons/react'
+import { Plus } from 'lucide-react'
 import { AgentConversation } from './AgentConversation'
 import { AgentHistoryPicker } from './AgentHistoryPicker'
 import { AgentSessionActionsMenu } from './AgentSessionActionsMenu'
@@ -35,7 +35,7 @@ export function AgentChatPage({ sessionId, userName, workspace, onSessionChange 
     <header className="topbar agent-chat-header">
       <strong>{sessionId === null ? t('newChat') : currentSession?.title ?? t('openingChat')}</strong>
       <span className="spacer" />
-      <button className="agent-chat-header-button" type="button" aria-label={t('newChat')} disabled={active || workspace.busy} onClick={() => void createSession()}><Plus size={16} /></button>
+      <button className="agent-chat-header-button" type="button" aria-label={t('newChat')} disabled={active || workspace.busy} onClick={() => void createSession()}><Plus size={16} strokeWidth={1.75} aria-hidden="true" /></button>
       <AgentHistoryPicker
         currentSessionId={currentSession?.id ?? null}
         disabled={active || workspace.busy}

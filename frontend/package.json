@@ -17,7 +17,6 @@
     "@emoji-mart/data": "^1.2.1",
     "@fontsource/inter": "^5.2.8",
     "@lobehub/ui": "^5.15.7",
-    "@phosphor-icons/react": "^2.1.10",
     "antd": "^6.5.4",
     "canvas-confetti": "^1.9.4",
     "dayjs": "^1.11.21",

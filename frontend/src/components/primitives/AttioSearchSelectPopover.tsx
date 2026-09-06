@@ -1,5 +1,5 @@
 import { useI18n } from '../../i18n'
-import { Check, MagnifyingGlass, X } from '@phosphor-icons/react'
+import { Check, Search, X } from 'lucide-react'
 import { Popover } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -199,17 +199,17 @@ export function AttioSearchSelectPopover({ ariaLabel, icon, summary, options, va
 
   const content = <div className="attio-search-select" onKeyDownCapture={captureEscape} onKeyDown={handleKeys}>
     <label className="attio-search-select-input">
-      <MagnifyingGlass size={14} />
+      <Search size={14} strokeWidth={1.75} aria-hidden="true" />
       <span className="sr-only">{searchPlaceholder}</span>
       <input ref={inputRef} role="combobox" aria-label={searchPlaceholder} aria-expanded={open} aria-controls={`${ariaLabel.replace(/\s+/g, '-').toLowerCase()}-options`} value={query} placeholder={searchPlaceholder} onChange={(event) => { requestControllerRef.current?.abort(); requestGenerationRef.current += 1; setQuery(event.target.value); setActiveIndex(0); setRemoteOptions([]); setNextCursor(null); setSearchError(null); setSearching(Boolean(searchOptions && event.target.value.trim())) }} />
     </label>
     {showSelectedChips && selected.length > 0 && <div className="attio-search-select-chips" aria-label={`${ariaLabel} selected`}>
-      {selected.map((option) => <span key={option.value}><OptionIdentity option={option} compact /><button type="button" aria-label={`Remove ${option.label}`} onClick={() => choose(option.value)}><X size={11} /></button></span>)}
+      {selected.map((option) => <span key={option.value}><OptionIdentity option={option} compact /><button type="button" aria-label={`Remove ${option.label}`} onClick={() => choose(option.value)}><X size={11} strokeWidth={1.75} aria-hidden="true" /></button></span>)}
     </div>}
     <div id={`${ariaLabel.replace(/\s+/g, '-').toLowerCase()}-options`} className="attio-search-select-options" role="listbox" aria-label={`${ariaLabel} options`} aria-multiselectable={multiple}>
       {filtered.map((option, index) => {
         const isSelected = values.includes(option.value)
-        return <button key={option.value} type="button" role="option" aria-label={option.label} aria-selected={isSelected} className={index === activeIndex ? 'attio-search-select-option active' : 'attio-search-select-option'} onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActiveIndex(index)} onClick={() => choose(option.value)}><OptionIdentity option={option} />{isSelected ? <Check size={14} weight="bold" /> : <i />}</button>
+        return <button key={option.value} type="button" role="option" aria-label={option.label} aria-selected={isSelected} className={index === activeIndex ? 'attio-search-select-option active' : 'attio-search-select-option'} onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActiveIndex(index)} onClick={() => choose(option.value)}><OptionIdentity option={option} />{isSelected ? <Check size={14} strokeWidth={2.5} aria-hidden="true" /> : <i />}</button>
       })}
       {searching && filtered.length === 0 && <div className="attio-search-select-empty">{loadingText}</div>}
       {!searching && filtered.length === 0 && !searchError && <div className="attio-search-select-empty">{emptyText}</div>}

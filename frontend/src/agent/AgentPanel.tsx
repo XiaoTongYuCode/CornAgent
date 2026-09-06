@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n'
-import { Plus, X } from '@phosphor-icons/react'
+import { Plus, X } from 'lucide-react'
 import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react'
 import { AgentConversation } from './AgentConversation'
 import { AgentHistoryPicker } from './AgentHistoryPicker'
@@ -203,7 +203,7 @@ export function AgentPanel({ workspace, userName, layout = 'docked' }: { workspa
         <strong>CornAgent</strong>
       </div>
       <span className="spacer" />
-      <button type="button" className="agent-icon-button" aria-label={t('newChat')} disabled={active || workspace.busy} onClick={() => void workspace.newSession()}><Plus size={16} /></button>
+      <button type="button" className="agent-icon-button" aria-label={t('newChat')} disabled={active || workspace.busy} onClick={() => void workspace.newSession()}><Plus size={16} strokeWidth={1.75} aria-hidden="true" /></button>
       <AgentHistoryPicker
         currentSessionId={workspace.session?.id ?? null}
         disabled={active || workspace.busy}
@@ -214,7 +214,7 @@ export function AgentPanel({ workspace, userName, layout = 'docked' }: { workspa
         search={workspace.searchSessions}
         onSessionChange={(sessionId) => { void workspace.selectSession(sessionId) }}
       />
-      <button type="button" className="agent-icon-button" aria-label={t('closeAgent')} onClick={requestClose}><X size={16} /></button>
+      <button type="button" className="agent-icon-button" aria-label={t('closeAgent')} onClick={requestClose}><X size={16} strokeWidth={1.75} aria-hidden="true" /></button>
     </header>
     <AgentConversation focusPrompt userName={userName} workspace={workspace} />
   </aside>
