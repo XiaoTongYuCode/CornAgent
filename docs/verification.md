@@ -4,6 +4,22 @@
 
 验证日期：2026-09-06。
 
+## README 循环演示
+
+README 使用 `/rendering` 的完整英文合成流程录制，覆盖思考、工具调用、流式正文与过程自动收起。浅色与深色 GIF 随 GitHub 主题切换，点击进入在线 `/rendering` 交互演示。
+
+录制脚本复用页面现有播放按钮与时间轴；仅在独立录制浏览器中隐藏导航和调试按钮，不修改应用代码，不调用模型或创建会话。成片裁去加载过程及录制同步标记，只保留演示区。旧首页截图保留为历史验证证据。
+
+本机准备 `ffmpeg`（含 `ffprobe`）、Node.js / npx，并先执行 `make dev`，然后运行：
+
+```sh
+uv run --python 3.12 python scripts/record_readme_demo.py
+```
+
+脚本使用固定版本 `agent-browser` 录制，输出 `screenshots/rendering-light.gif`、`screenshots/rendering-dark.gif`：960 × 560、25 帧/秒、完整流程后停留 3 秒、无限循环。自动检查英文、主题、内容完整性、裁切与循环标记；更新后仍需目视检查关键帧和 README 浅色/深色展示。
+
+本次成片均为 18.8 秒、470 帧；浅色约 0.44 MiB，深色约 0.51 MiB。已核对英文关键帧、表格边框和背景色阶，以及 README 图片主题切换和跳转地址。脚本 Ruff / 编译检查、`make check`、`make build` 通过。
+
 ## 品牌、侧栏图标与署名
 
 侧栏标题左侧使用 24px 独立 SVG 图标，图形和文字中心偏差为 0px；CSS mask 随深浅主题切换。Vite 内联 SVG 的 URL 使用引号，避免数据 URL 内的属性引号使 mask 声明失效。

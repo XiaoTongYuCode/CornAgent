@@ -25,10 +25,16 @@
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/home-dark.png" />
-    <img src="docs/screenshots/home.png" alt="CornAgent 首页：聊天导航、对话输入与可交互的底部署名" width="1120" />
-  </picture>
+  <a href="https://cornagent.xiaotongyu.com/rendering">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/rendering-dark.gif" />
+      <img src="docs/screenshots/rendering-light.gif" alt="CornAgent 英文演示：思考、工具调用、流式回答与过程自动收起，循环播放" width="960" />
+    </picture>
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://cornagent.xiaotongyu.com/rendering">查看 Demo 演示</a>
 </p>
 
 ## 为什么使用 CornAgent
