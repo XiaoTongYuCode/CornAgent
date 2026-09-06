@@ -1,4 +1,5 @@
 import { localizeSystemMessage } from '../i18n/systemMessages'
+import { GithubOutlined, XOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClientId } from '../client-id'
 import { useI18n, type Locale } from '../i18n'
@@ -105,6 +106,14 @@ export function AgentConversation({ workspace, userName, focusPrompt = false, on
             <h1>{localizedGreeting(locale, userName)}</h1>
           </div>
           {prompt}
+          <div className="agent-new-conversation__social-links">
+            <a href="https://github.com/XiaoTongYuCode/CornAgent" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="GitHub">
+              <GithubOutlined aria-hidden="true" />
+            </a>
+            <a href="https://x.com/tongyu_xiao" target="_blank" rel="noopener noreferrer" aria-label="X" title="X">
+              <XOutlined aria-hidden="true" />
+            </a>
+          </div>
         </div>
         : <AgentMessageList workspace={workspace} />}
     {workspace.available !== false && !emptyConversation && pendingQuestion && <div className="agent-question-composer">

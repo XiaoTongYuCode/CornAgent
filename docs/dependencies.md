@@ -24,6 +24,7 @@
 | `@lobehub/ui` | 流式 Markdown、聊天消息布局、滚动区、加载状态与主题 Provider |
 | `antd` | 弹窗、搜索浮层、输入、问题选项、骨架屏与主题 |
 | `lucide-react` | 应用通用图标 |
+| `@ant-design/icons` | 新对话输入框下方的 GitHub、X 品牌图标 |
 | `motion` | 文字切换、消息过程展开/收起与 Lobe Provider 的动画接口 |
 | `canvas-confetti` | 作者署名和回答完成的庆祝动画 |
 | `thinking-orbs` | 首页及生成中的动态球体 |

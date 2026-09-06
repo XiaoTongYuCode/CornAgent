@@ -133,6 +133,10 @@ html.agent-panel-resizing .app-shell { transition: none; }
 .agent-new-conversation__orb { flex: 0 0 auto;}
 .agent-new-conversation h1 { margin: 0; color: var(--text); font-size: 20px; font-weight: 600; line-height: 24px; letter-spacing: -.2px; }
 .agent-new-conversation .prompt-panel-container.agent-conversation-prompt { width: 100%; margin: 0; }
+.agent-new-conversation__social-links { display: flex; justify-content: flex-end; gap: 4px; width: 100%; }
+.agent-new-conversation__social-links a { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); font-size: 18px; text-decoration: none; }
+.agent-new-conversation__social-links a:hover { color: var(--text); background: var(--control-hover); }
+.agent-new-conversation__social-links a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
 .agent-error-banner {
   margin: 10px 14px 0;
