@@ -204,7 +204,3 @@ CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 ## 许可
 
 CornAgent 使用 **[MIT 许可证](LICENSE)**。移植来源与第三方依赖说明见 [NOTICE](NOTICE)。
-
-<p align="center">
-  Made by <a href="https://xiaotongyu.com">xiaotongyu.com</a>
-</p>
