@@ -139,7 +139,7 @@ export function isStreamingToolCallPart(
     part.kind === 'tool_call' &&
     isProcessActive &&
     !isFailedToolCallPart(part) &&
-    isStreamingTitle(getToolCallDisplayTitle(part))
+    (part.metadata?.status === 'running' || part.metadata?.status === 'waiting' || isStreamingTitle(getToolCallDisplayTitle(part)))
   )
 }
 

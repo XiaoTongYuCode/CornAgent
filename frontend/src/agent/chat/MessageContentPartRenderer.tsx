@@ -237,7 +237,7 @@ export function MessageRenderPlanContent({
         title={displayTitle}
         titleTransition
         titleClassName={isFailedToolCall ? 'chat-markdown-message-content__tool-title--failed' : ''}
-        titleStreaming={!isFailedToolCall && isPartActive && isStreamingTitle(displayTitle)}
+        titleStreaming={!isFailedToolCall && isPartActive}
         titleIcon={getCollapsibleTitleIcon(displayTitle)}
         variant="chat"
       />
