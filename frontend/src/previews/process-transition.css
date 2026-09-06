@@ -1,10 +1,13 @@
-.transition-preview { max-width: 920px; margin: 0 auto; padding: 32px 24px 80px; }
+.cornagent-main--rendering { display: grid; grid-template-rows: var(--app-header-height, 50px) minmax(0, 1fr); overflow: hidden; }
+.transition-preview { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; max-width: 920px; margin: 0 auto; padding: 32px 24px 24px; }
+.transition-preview__header { flex: 0 0 auto; }
 .transition-preview h1 { margin: 0; font-size: 24px; font-weight: 600; }
 .transition-preview__header p { color: var(--muted); margin: 12px 0 20px; }
 .transition-preview__controls { display: flex; gap: 8px; flex-wrap: wrap; }
-.transition-preview__message { margin: 32px auto 0; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); }
+.transition-preview__message { flex: 1; width: 100%; min-height: 0; margin: 32px 0 0; overflow: auto; overscroll-behavior: contain; }
+.transition-preview__message:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .transition-preview__message--narrow { max-width: 390px; }
 @media (max-width: 600px) {
-  .transition-preview { padding: 16px 12px 32px; }
+  .transition-preview { padding: 16px 12px 12px; }
   .transition-preview h1 { font-size: 20px; }
 }

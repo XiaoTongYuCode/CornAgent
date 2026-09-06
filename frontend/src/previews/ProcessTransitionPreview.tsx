@@ -59,7 +59,7 @@ export function ProcessTransitionPreview() {
         <Button onClick={toggleLocale}>{t('transitionPreviewLanguage')}</Button>
       </div>
     </header>
-    <section className={`transition-preview__message${narrow ? ' transition-preview__message--narrow' : ''}`}>
+    <section className={`transition-preview__message${narrow ? ' transition-preview__message--narrow' : ''}`} aria-label={t('transitionPreviewTitle')} tabIndex={0}>
       <MarkdownMessageContent key={resetKey} content="" contentParts={contentParts} enableProcessSession
         isMessageStreaming={Boolean(playback)} isProcessActive={Boolean(playback)} fontSize={14} />
     </section>

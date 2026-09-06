@@ -110,7 +110,7 @@ function Application({ path, sessionId }: { path: string; sessionId: string | nu
           if (window.location.pathname === `/chat/${encodeURIComponent(id)}`) changeSession(null)
         }}
       />
-      <main className="cornagent-main" inert={mobile && mobileOpen}>
+      <main className={`cornagent-main${renderingPreview ? ' cornagent-main--rendering' : ''}`} inert={mobile && mobileOpen}>
         {renderingPreview ? (
           <>
             <header className="topbar"><strong>{t('agentRendering')}</strong></header>
