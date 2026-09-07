@@ -1020,7 +1020,9 @@ def test_production_child_adapter_uses_only_child_prompt_and_scoped_tools(settin
     assert messages[0]["content"].startswith(CHILD_AGENT_SYSTEM_PROMPT)
     assert [message["role"] for message in messages] == ["system", "user"]
     assert not any(message.get("content") == SYSTEM_PROMPT for message in messages)
-    assert {tool["function"]["name"] for tool in requests[0]["tools"]} == {"mock_web_search"}
+    assert {tool["function"]["name"] for tool in requests[0]["tools"]} == {
+        "mock_web_search", "web_search", "read_url",
+    }
     assert runtime.model_client.system_prompt == SYSTEM_PROMPT
     asyncio.run(runtime.close())
     application.state.database.close()

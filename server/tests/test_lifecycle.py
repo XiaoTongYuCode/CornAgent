@@ -201,6 +201,8 @@ def test_exact_tool_catalog_and_no_auth_routes(client_factory):
             "ask_user",
             "read_file",
             "mock_web_search",
+            "web_search",
+            "read_url",
             "spawn_subagents",
             "list_subagents",
             "collect_subagent_results",

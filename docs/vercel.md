@@ -14,6 +14,8 @@
 | --- | --- |
 | `CORNAGENT_DATABASE_URL` | 云端 PostgreSQL 的 `postgresql+psycopg://` 连接串，启用 TLS |
 | `CORNAGENT_REDIS_URL` | 云端 Redis 的 `rediss://` TCP 连接串，不使用 REST URL |
+| `tavily_api_key` | Tavily 搜索密钥，仅保存在服务端环境变量中 |
+| `CORNAGENT_AGENT_MOCK_TOOLS_ENABLED` | `false`，正式环境使用真实网络工具 |
 | `CORNAGENT_AGENT_API_KEY` | 本地 `.env` 中的 OpenRouter 密钥 |
 | `CORNAGENT_AGENT_API_BASE` | `https://openrouter.ai/api/v1` |
 | `CORNAGENT_AGENT_MODEL` | `openrouter/` 加 OpenRouter 模型 ID |

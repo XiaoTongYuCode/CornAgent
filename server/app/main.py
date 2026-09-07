@@ -23,6 +23,7 @@ from app.agent.tools.base import ToolDefinition
 from app.agent.tools.catalog import build_default_tool_catalog
 from app.agent.tools.files import build_file_tools
 from app.agent.tools.mock_search import build_mock_web_search_tool
+from app.agent.tools.web import build_web_tools
 from app.api.routes.agent import router as agent_router
 from app.api.routes.files import router as file_router
 from app.database import Database
@@ -96,6 +97,7 @@ def create_app(
         tool_catalog=build_default_tool_catalog(
             [
                 *build_file_tools(database.session_factory),
+                *build_web_tools(settings),
                 *([build_mock_web_search_tool()] if settings.agent_mock_tools_enabled else []),
                 *additional_tools,
             ]

@@ -31,6 +31,7 @@ def settings(tmp_path):
         )
     settings = Settings(
         _env_file=None,
+        agent_mock_tools_enabled=True,
         environment=schema,
         database_url=url,
         redis_url=os.environ.get("CORNAGENT_TEST_REDIS_URL"),

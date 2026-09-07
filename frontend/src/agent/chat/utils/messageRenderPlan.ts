@@ -50,6 +50,7 @@ const TOOL_NAME_PREFIXES = [
 const FILE_EDIT_OPERATIONS = ['write', 'edit', 'patch', 'jsonl_append']
 const FILE_LOOKUP_OPERATIONS = ['read', 'search', 'tree']
 const TOOL_ACTION_BUCKET_BY_NAME: Partial<Record<string, ToolActionBucket>> = {
+  read_url: 'search',
   mock_web_search: 'search',
   spawn_subagents: 'subagentControl',
   list_subagents: 'subagentControl',

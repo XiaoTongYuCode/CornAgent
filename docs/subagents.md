@@ -37,7 +37,7 @@ Child 可生成 `completed` 或 `needs_input`；运行时生成失败、取消�
 
 | 配置 | 默认值 |
 | --- | --- |
-| 开启子任务、模拟工具 | 均为 true |
+| 开启子任务、模拟工具 | 子任务 true，模拟工具 false |
 | 单次 / 每 Root 任务数 | 10 / 10 |
 | 每 Root Child 并行 / 每实例 Root + Child 执行数 | 5 / 20 |
 | Child 截止时间 | 从创建起 600 秒，重试不延长 |
@@ -56,9 +56,11 @@ Child 可生成 `completed` 或 `needs_input`；运行时生成失败、取消�
 
 配置模型与本机 PostgreSQL/Redis，运行 `make setup && make dev`，在 `/chat` 或 `/sidebar` 发送：
 
+先显式设置 `CORNAGENT_AGENT_MOCK_TOOLS_ENABLED=true`，仅用于以下模拟演示。
+
 > 演示并行子任务。先由你调用 mock_web_search 搜索“电池方案”，再使用 spawn_subagents 同时派发三个 required=true 的任务：researcher 收集晨光模块化方案的优势；analyst 比较晨光与松林方案；verifier 核验接口风险和证据缺口。每个任务应调用 mock_web_search，并在结果中明确写出“模拟资料”。派发后你继续搜索成本缺口，调用 list_subagents 查看进度，然后 wait_subagents 等待，并 collect_subagent_results 收齐未交付结果，最后生成一份带证据和未知项的对比表。所有资料均为本地虚构示例，不要称为真实网络搜索。
 
-快捷等待模式可将派发要求改为 `delegate_tasks`。正式应用中的 Root 和 Child 都使用真实模型；只有搜索数据是固定模拟资料。真实模型自行选择工具，因此确定性验收另使用测试模型。
+快捷等待模式可将派发要求改为 `delegate_tasks`。正式应用中的 Root 和 Child 都使用真实模型；默认网络工具使用真实 Tavily/Jina 数据，以上演示显式使用模拟资料。真实模型自行选择工具，因此确定性验收另使用测试模型。
 
 不依赖模型密钥的浏览器演示入口是 `tests.subagent_browser_app:browser_app`：显式注入两个测试模型，实际经过编排、工具执行、数据库、Redis 和前端渲染。先准备专用空测试 schema，将它写进 `CORNAGENT_DATABASE_URL` 的 `options=-csearch_path%3D<schema>`，运行迁移；然后从 `server` 启动：
 
@@ -107,7 +109,7 @@ def app():
     )
 ```
 
-使用 `uv run uvicorn example_app:app --factory`。关闭默认模拟工具后，可用同一注册机制添加真实检索工具。工具名不能重复；如果要替换 `mock_web_search`，必须关闭默认注册。`read_only` 是宿主对代码行为的声明，宿主应确保访问凭据与处理函数确实只读；框架不对任意 Python 函数做系统调用沙箱。
+使用 `uv run uvicorn example_app:app --factory`。默认已注册 `web_search` 和 `read_url`，可用同一机制添加其他检索工具。工具名不能重复；如果要替换 `mock_web_search`，必须关闭默认注册。`read_only` 是宿主对代码行为的声明，宿主应确保访问凭据与处理函数确实只读；框架不对任意 Python 函数做系统调用沙箱。
 
 自定义模型实现 `AgentModelClient.stream(messages)` 与 `compact(messages, max_tokens=...)`。`create_app(model_client=root_model, child_model_client=child_model)` 分别注入两个客户端，测试无需影响正式模型配置。Child 客户端接收独立系统提示和任务消息；使用自建 provider 适配器时也应绑定 Child 工具目录；直接注入 `LiteLLMAgentModel` 时设置 `system_prompt=None`，由 Child runner 提供独立提示词，避免附带主 Agent 的 Markdown/提问约定。工具上下文的 `checkpoint_state` 和 `runtime_cache` 在单个 Child 内共享，不与 Root 或兄弟任务共享；执行器丢失后 Child 从任务定义重新只读执行。
 

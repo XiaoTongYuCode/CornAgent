@@ -40,7 +40,6 @@
 .chat-markdown-message-content__process { --chat-collapsible-body-gap: 10px; width: 100%; margin-bottom: 10px; }
 .chat-markdown-message-content__process > .chat-collapsible-content__toggle { position: relative; box-sizing: border-box; width: 100%; gap: 7px; padding-block: 6px 8px; color: var(--muted); border-bottom: 1px solid transparent; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .chat-markdown-message-content__process > .chat-collapsible-content__toggle .chat-collapsible-content__title { flex: 0 1 auto; }
-.chat-markdown-message-content__process > .chat-collapsible-content__toggle:active:not(:disabled) { transform: none; }
 .chat-markdown-message-content__process > .chat-collapsible-content__toggle::after {
   content: '';
   position: absolute;

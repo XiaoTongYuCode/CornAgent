@@ -22,6 +22,10 @@
   color: var(--text);
 }
 
+.chat-collapsible-content__toggle:active:not(:disabled) {
+  transform: none;
+}
+
 .chat-collapsible-content__toggle:disabled,
 .chat-collapsible-content__toggle--disabled {
   cursor: default;

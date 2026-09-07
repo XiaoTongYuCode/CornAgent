@@ -51,7 +51,8 @@ class Settings(BaseSettings):
     agent_stream_max_events: int = Field(default=1_000, ge=100, le=10_000)
     agent_max_concurrency: int = Field(default=20, ge=1, le=500)
     agent_subagents_enabled: bool = True
-    agent_mock_tools_enabled: bool = True
+    tavily_api_key: SecretStr | None = Field(default=None, validation_alias="tavily_api_key")
+    agent_mock_tools_enabled: bool = False
     agent_subagent_model: str | None = None
     agent_subagent_spawn_max_tasks: int = Field(default=10, ge=1, le=10)
     agent_subagent_run_max_tasks: int = Field(default=10, ge=1, le=100)
