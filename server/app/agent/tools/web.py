@@ -132,7 +132,7 @@ def build_web_tools(settings: Settings) -> tuple[ToolDefinition, ...]:
         context.raise_if_cancelled()
         data = await _request(
             "https://r.jina.ai/",
-            headers={"Accept": "application/json"},
+            headers={"Accept": "application/json", "X-No-Cache": "true"},
             payload=args,
         )
         context.raise_if_cancelled()

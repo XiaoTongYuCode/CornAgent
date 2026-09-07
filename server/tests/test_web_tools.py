@@ -83,6 +83,7 @@ def test_search_and_reader_for_child_with_bounded_content(web):
     assert str(requests[1].url) == "https://r.jina.ai/"
     assert json.loads(requests[1].content) == {"url": "https://example.com?a=b"}
     assert "authorization" not in requests[1].headers
+    assert requests[1].headers["x-no-cache"] == "true"
     assert executor.catalog.for_scope("child").names() == ("web_search", "read_url")
 
 
