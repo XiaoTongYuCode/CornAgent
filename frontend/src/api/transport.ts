@@ -1,3 +1,5 @@
+import { messages, type MessageKey } from '../i18n/catalog'
+
 export interface ApiErrorBody {
   error?: {
     code?: string
@@ -50,5 +52,34 @@ export function isCornAgentApiError(error: unknown): error is CornAgentApiError 
 }
 
 export function apiErrorMessage(error: unknown, fallback: string, translator?: (zh: string, en: string) => string) {
-  return error instanceof Error ? error.message : translator ? translator(fallback, fallback) : fallback
+  let key: MessageKey | undefined
+  if (error instanceof CornAgentApiError) {
+    key = errorCodes[error.code] ?? errorStatuses[error.status]
+    if (!key && error.status >= 500) key = 'errorUnavailable'
+  } else if (error instanceof TypeError) key = 'errorNetwork'
+  if (!key) return fallback
+  const [zh, en] = messages[key]
+  return translator ? translator(zh, en) : en
+}
+
+const errorCodes: Readonly<Record<string, MessageKey>> = {
+  file_operations_busy: 'errorFileBusy',
+  file_upload_timeout: 'errorUploadTimeout',
+  file_too_large: 'errorFileSize',
+  file_size_mismatch: 'errorFileSize',
+  file_format_invalid: 'errorFileFormat',
+  file_integrity_error: 'errorFileIntegrity',
+  file_content_conflict: 'errorFileIntegrity',
+  file_not_writable: 'errorFileClaimed',
+  file_already_claimed: 'errorFileClaimed',
+  session_file_extraction_failed: 'errorPdfExtraction',
+  session_file_extraction_timeout: 'errorPdfTimeout',
+  agent_question_already_resolved: 'errorQuestionResolved',
+  agent_run_not_waiting: 'errorQuestionResolved',
+  agent_run_active: 'errorRunActive',
+}
+const errorStatuses: Readonly<Record<number, MessageKey>> = {
+  401: 'errorUnauthorized', 403: 'errorForbidden', 404: 'errorNotFound',
+  408: 'errorTimeout', 409: 'errorConflict', 413: 'errorFileSize',
+  422: 'errorInvalidInput', 429: 'errorRateLimit',
 }

@@ -62,7 +62,7 @@ export function AgentChatPage({ sessionId, userName, workspace, onSessionChange,
       />}
     </header>
     {sessionId !== null && !currentSession && workspace.available !== false && !workspace.error
-      ? <div className="workspace-loading" role="status"><span className="spinner" />{t('openingChat')}</div>
+      ? <div className="workspace-loading" role="status"><span className="spinner" aria-hidden="true" /><span>{t('openingChat')}</span></div>
       : <AgentConversation emptyStateFooter={emptyStateFooter} focusPrompt={focusPrompt} onSessionChange={onSessionChange} userName={userName} workspace={workspace} />}
   </div>
 }

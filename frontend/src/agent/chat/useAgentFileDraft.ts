@@ -1,4 +1,5 @@
 import { useI18n } from '../../i18n'
+import { apiErrorMessage } from '../../api/transport'
 import { localizeSystemMessage } from '../../i18n/systemMessages'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -37,11 +38,12 @@ export function useAgentFileDraft({
   upload,
   remove,
 }: UseAgentFileDraftOptions) {
-  const { locale } = useI18n()
+  const { locale, text } = useI18n()
   const [files, setFiles] = useState<AgentDraftFile[]>([])
   const [error, setError] = useState<string | null>(null)
   const filesRef = useRef<AgentDraftFile[]>([])
   const controllers = useRef(new Map<string, AbortController>())
+  const failures = useRef(new Map<string, { reason: unknown }>())
   const revision = useRef(0)
 
   const replaceFiles = useCallback((update: (current: AgentDraftFile[]) => AgentDraftFile[]) => {
@@ -56,6 +58,7 @@ export function useAgentFileDraft({
     revision.current += 1
     controllers.current.forEach((controller) => controller.abort())
     controllers.current.clear()
+    failures.current.clear()
     const current = filesRef.current
     filesRef.current = []
     setFiles([])
@@ -74,6 +77,7 @@ export function useAgentFileDraft({
   }, [dispose, revisionKey])
 
   const uploadItem = useCallback(async (item: AgentDraftFile, existingFileId?: string) => {
+    failures.current.delete(item.id)
     const itemRevision = revision.current
     const controller = new AbortController()
     controllers.current.get(item.id)?.abort()
@@ -112,6 +116,7 @@ export function useAgentFileDraft({
         : candidate))
     } catch (reason) {
       if (revision.current !== itemRevision || controller.signal.aborted) return
+      failures.current.set(item.id, { reason })
       replaceFiles((current) => current.map((candidate) => candidate.id === item.id
         ? {
           ...candidate,
@@ -178,6 +183,7 @@ export function useAgentFileDraft({
     controllers.current.get(id)?.abort()
     controllers.current.delete(id)
     URL.revokeObjectURL(target.previewUrl)
+    failures.current.delete(id)
     replaceFiles((current) => current.filter((file) => file.id !== id))
     if (target.fileId) void remove(target.fileId).catch(() => undefined)
   }, [remove, replaceFiles])
@@ -197,7 +203,9 @@ export function useAgentFileDraft({
   const failed = files.some((file) => file.status === 'error')
 
   return {
-    files,
+    files: files.map((file) => ({ ...file, error: file.error
+      ? apiErrorMessage(failures.current.get(file.id)?.reason, localizeSystemMessage(file.error, locale), text)
+      : null })),
     error: error ? localizeSystemMessage(error, locale) : null,
     addFiles,
     removeFile,

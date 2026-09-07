@@ -1,9 +1,9 @@
 import asyncio
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import Request
-from fastapi.testclient import TestClient
 from sqlalchemy import select
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -112,13 +112,22 @@ def test_all_new_run_routes_share_ip_quota_and_replays_are_free(settings, client
             },
         )
         assert forged.status_code == 429
-        # Reuse the running application, including its limiter and database.
-        other = TestClient(client.app, client=("192.0.2.2", 5678))
-        try:
-            assert other.get(f"/api/v1/agent/sessions/{session_id}").status_code == 200
-            start(other)
-        finally:
-            other.close()
+
+        # Reuse the application's event loop as well as its real Redis connections.
+        async def other_address():
+            transport = httpx.ASGITransport(app=client.app, client=("192.0.2.2", 5678))
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as other:
+                assert (await other.get(f"/api/v1/agent/sessions/{session_id}")).status_code == 200
+                response = await other.post(
+                    "/api/v1/agent/sessions",
+                    json={"content": "other address"},
+                    headers={"Idempotency-Key": str(uuid4())},
+                )
+                assert response.status_code == 200, response.text
+
+        client.portal.call(other_address)
 
 
 def test_question_response_does_not_consume_new_run_quota(client_factory):

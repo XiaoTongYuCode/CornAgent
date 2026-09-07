@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createClientId } from '../client-id'
+import { apiErrorMessage } from '../api/transport'
 import { HttpAgentGateway, toRun, toSnapshot } from './gateway'
 import type { AgentContentPart, AgentFileInputCapabilities, AgentMessage, AgentQuestionResponse, AgentRun, AgentSession, AgentSessionDetail, AgentSessionPage, AgentSnapshot, AgentSseEvent, AgentUploadedFile } from './types'
 
@@ -141,7 +142,7 @@ export function useAgentWorkspace(
       if (
         principalRevision.current === expectedPrincipalRevision
         && sessionListLoadRevision.current === revision
-      ) setError(reason instanceof Error ? reason.message : '无法加载更多对话。')
+      ) setError(apiErrorMessage(reason, reason instanceof Error ? reason.message : '无法加载更多对话。'))
     } finally {
       setLoadingMoreSessions(false)
     }
@@ -232,7 +233,7 @@ export function useAgentWorkspace(
         await refreshSession(targetId)
       }
     }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : 'Agent 状态读取失败。')
+      if (active) setError(apiErrorMessage(reason, reason instanceof Error ? reason.message : 'Agent 状态读取失败。'))
     })
     return () => { active = false }
   }, [gateway, open, principalKey, refreshSession, refreshSessions, routeSessionId])
@@ -261,7 +262,7 @@ export function useAgentWorkspace(
           retryDelay = 250
         } catch (reason) {
           if (controller.signal.aborted) return
-          setError(reason instanceof Error ? reason.message : 'Agent 连接中断，正在恢复。')
+          setError(apiErrorMessage(reason, reason instanceof Error ? reason.message : 'Agent 连接中断，正在恢复。'))
           await new Promise((resolve) => window.setTimeout(resolve, retryDelay))
           retryDelay = Math.min(retryDelay * 2, 2_000)
         }
@@ -333,7 +334,7 @@ export function useAgentWorkspace(
   const ask = useCallback(async (content: string, fileIds: string[] = []) => {
     try { return await start(content, fileIds, { createNew: true }) } catch (reason) {
       const failure = reason instanceof Error ? reason : new Error('无法开始 Agent 对话。')
-      if (failure.name !== 'AbortError') setError(failure.message)
+      if (failure.name !== 'AbortError') setError(apiErrorMessage(failure, failure.message))
       throw failure
     }
   }, [start])
@@ -405,7 +406,7 @@ export function useAgentWorkspace(
         principalRevision.current === expectedPrincipalRevision
         && sessionMutationRevision.current === revision
         && sessionIdRef.current === id
-      ) setError(failure.message)
+      ) setError(apiErrorMessage(failure, failure.message))
       throw failure
     } finally {
       if (
@@ -432,7 +433,7 @@ export function useAgentWorkspace(
       if (
         sessionLoadRevision.current === expectedSessionLoadRevision
         && sessionIdRef.current === current.id
-      ) setError(reason instanceof Error ? reason.message : '无法加载更早消息。')
+      ) setError(apiErrorMessage(reason, reason instanceof Error ? reason.message : '无法加载更早消息。'))
     } finally {
       setLoadingOlder(false)
     }

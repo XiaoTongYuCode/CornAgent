@@ -383,7 +383,6 @@ class AgentRuntime:
                 worker_id=self.worker_id,
                 fence=fence,
                 cancel_event=cancel_event,
-                extra={"source_context": dict(state.get("source_context") or {})},
                 checkpoint_state=dict(checkpoint.get("tool_context_state") or {}),
                 runtime_cache={},
             )
@@ -417,7 +416,6 @@ class AgentRuntime:
                     )
                     model_messages = [
                         *runtime_system_messages(
-                            source_context=state.get("source_context") or {},
                             skill_blocks=self.skill_prompt_blocks,
                         ),
                         {"role": "system", "content": self._orchestration_notice(boundary)},

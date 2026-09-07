@@ -28,7 +28,8 @@
 .topbar strong { font-size: 14px; font-weight: 500; }
 .cornagent-example { max-width: 800px; margin: 100px auto; padding: 0 clamp(20px, 4vw, 48px); }
 .cornagent-example h1 { font-size: clamp(24px, 3vw, 34px); letter-spacing: -1px; margin: 20px 0; font-weight: 500; }
-.workspace-loading { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); }
+.workspace-loading { display: flex; align-items: center; justify-content: center; gap: 8px; height: 100%; color: var(--muted); line-height: 20px; }
+.workspace-loading > .spinner { display: block; }
 .form-error { color: #db4545; padding-top: 12px; }
 
 @media (max-width: 864px) {

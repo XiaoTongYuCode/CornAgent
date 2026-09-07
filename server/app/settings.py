@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     agent_stream_batch_window_ms: int = Field(default=32, ge=0, le=1_000)
     agent_stream_batch_max_bytes: int = Field(default=4_096, ge=256, le=65_536)
     agent_file_input_enabled: bool = True
+    file_upload_body_timeout_seconds: float = Field(default=60, gt=0, le=300)
+    file_admission_timeout_seconds: float = Field(default=5, gt=0, le=60)
+    file_body_max_concurrency: int = Field(default=2, ge=1, le=16)
+    file_upload_max_concurrency: int = Field(default=2, ge=1, le=16)
+    file_extraction_max_concurrency: int = Field(default=1, ge=1, le=4)
     agent_file_image_mime_types: tuple[str, ...] = (
         "image/jpeg",
         "image/png",

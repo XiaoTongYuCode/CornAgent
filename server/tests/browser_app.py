@@ -38,8 +38,19 @@ class BrowserTestModel:
                         {
                             "query": "接下来希望如何继续？",
                             "options": [
-                                {"content": "继续", "description": "继续生成完整回答"},
-                                {"content": "调整", "description": "先调整需求"},
+                                {
+                                    "content": "继续生成完整回答，"
+                                    "并保留所有已经确认的条件和原始资料",
+                                    "description": "使用当前会话的完整背景继续处理；"
+                                    "这段较长的说明用于验证桌面省略、悬停全文和触屏换行展示。",
+                                },
+                                {
+                                    "content": "Adjust the requirements before continuing "
+                                    "with the original request",
+                                    "description": "Review all assumptions and constraints "
+                                    "before proceeding, including details that must remain "
+                                    "readable on a narrow mobile screen.",
+                                },
                             ],
                         },
                         ensure_ascii=False,

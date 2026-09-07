@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, Query, Request
@@ -46,6 +47,15 @@ def _repository(request: Request, db: Db) -> AgentRepository:
         file_max_total_bytes=settings.agent_file_max_total_bytes,
         pdf_max_count=settings.agent_file_pdf_max_count,
     )
+
+
+async def _run_repository[T](request: Request, operation: Callable[[AgentRepository], T]) -> T:
+    def execute() -> T:
+        # Each database phase owns its Session in the worker thread.
+        with request.app.state.database.session_factory() as db:
+            return operation(_repository(request, db))
+
+    return await run_in_threadpool(execute)
 
 
 @router.get("/status")
@@ -102,37 +112,40 @@ async def create_agent_session_run(
     payload: AgentSessionRunCreate,
     request: Request,
     identity: CurrentIdentity,
-    db: Db,
     idempotency_key: IdempotencyKey = None,
 ) -> AgentSessionRunOut:
     runtime = _runtime(request)
     runtime.require_available()
     key = require_idempotency_key(idempotency_key)
-    repository = _repository(request, db)
-    replay = repository.replay_session_run(
-        identity,
-        content=payload.content,
-        idempotency_key=key,
-        title=payload.title,
-        context=payload.context,
-        attachment_file_ids=[item.file_id for item in payload.attachments],
+    replay = await _run_repository(
+        request,
+        lambda repository: repository.replay_session_run(
+            identity,
+            content=payload.content,
+            idempotency_key=key,
+            title=payload.title,
+            context=payload.context,
+            attachment_file_ids=[item.file_id for item in payload.attachments],
+        ),
     )
     if replay is not None:
         session, run = replay
         if run.status == "pending":
             runtime.kick(run.id)
         return AgentSessionRunOut(session=session, run=run)
-    db.rollback()
     await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
     verified_context = await runtime.verify_source_context(identity, payload.context)
-    session, run = repository.create_session_run(
-        identity,
-        content=payload.content,
-        idempotency_key=key,
-        title=payload.title,
-        context=verified_context,
-        request_context=payload.context,
-        attachment_file_ids=[item.file_id for item in payload.attachments],
+    session, run = await _run_repository(
+        request,
+        lambda repository: repository.create_session_run(
+            identity,
+            content=payload.content,
+            idempotency_key=key,
+            title=payload.title,
+            context=verified_context,
+            request_context=payload.context,
+            attachment_file_ids=[item.file_id for item in payload.attachments],
+        ),
     )
     if run.status == "pending":
         runtime.kick(run.id)
@@ -170,31 +183,34 @@ async def create_agent_run(
     payload: AgentRunCreate,
     request: Request,
     identity: CurrentIdentity,
-    db: Db,
     idempotency_key: IdempotencyKey = None,
 ) -> AgentRunOut:
     runtime = _runtime(request)
     runtime.require_available()
     key = require_idempotency_key(idempotency_key)
-    repository = _repository(request, db)
-    replay = repository.replay_run(
-        identity,
-        idempotency_key=key,
-        operation="create_run",
-        target_id=session_id,
-        content=payload.content,
-        attachment_file_ids=[item.file_id for item in payload.attachments],
+    replay = await _run_repository(
+        request,
+        lambda repository: repository.replay_run(
+            identity,
+            idempotency_key=key,
+            operation="create_run",
+            target_id=session_id,
+            content=payload.content,
+            attachment_file_ids=[item.file_id for item in payload.attachments],
+        ),
     )
     if replay is not None:
         return replay
-    db.rollback()
     await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
-    run = repository.create_run(
-        identity,
-        session_id,
-        payload.content,
-        key,
-        attachment_file_ids=[item.file_id for item in payload.attachments],
+    run = await _run_repository(
+        request,
+        lambda repository: repository.create_run(
+            identity,
+            session_id,
+            payload.content,
+            key,
+            attachment_file_ids=[item.file_id for item in payload.attachments],
+        ),
     )
     if run.status == "pending":
         runtime.kick(run.id)
@@ -206,24 +222,26 @@ async def regenerate_agent_message(
     message_id: str,
     request: Request,
     identity: CurrentIdentity,
-    db: Db,
     idempotency_key: IdempotencyKey = None,
 ) -> AgentRunOut:
     runtime = _runtime(request)
     runtime.require_available()
     key = require_idempotency_key(idempotency_key)
-    repository = _repository(request, db)
-    replay = repository.replay_run(
-        identity,
-        idempotency_key=key,
-        operation="regenerate",
-        target_id=message_id,
+    replay = await _run_repository(
+        request,
+        lambda repository: repository.replay_run(
+            identity,
+            idempotency_key=key,
+            operation="regenerate",
+            target_id=message_id,
+        ),
     )
     if replay is not None:
         return replay
-    db.rollback()
     await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
-    run = repository.regenerate(identity, message_id, key)
+    run = await _run_repository(
+        request, lambda repository: repository.regenerate(identity, message_id, key)
+    )
     if run.status == "pending":
         runtime.kick(run.id)
     return run
@@ -235,38 +253,41 @@ async def edit_agent_message(
     payload: AgentMessageEdit,
     request: Request,
     identity: CurrentIdentity,
-    db: Db,
     idempotency_key: IdempotencyKey = None,
 ) -> AgentRunOut:
     runtime = _runtime(request)
     runtime.require_available()
     key = require_idempotency_key(idempotency_key)
-    repository = _repository(request, db)
-    replay = repository.replay_run(
-        identity,
-        idempotency_key=key,
-        operation="edit",
-        target_id=message_id,
-        content=payload.content,
-        attachment_file_ids=(
-            [item.file_id for item in payload.attachments]
-            if payload.attachments is not None
-            else None
+    replay = await _run_repository(
+        request,
+        lambda repository: repository.replay_run(
+            identity,
+            idempotency_key=key,
+            operation="edit",
+            target_id=message_id,
+            content=payload.content,
+            attachment_file_ids=(
+                [item.file_id for item in payload.attachments]
+                if payload.attachments is not None
+                else None
+            ),
         ),
     )
     if replay is not None:
         return replay
-    db.rollback()
     await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
-    run = repository.edit_user_message(
-        identity,
-        message_id,
-        payload.content,
-        key,
-        attachment_file_ids=(
-            [item.file_id for item in payload.attachments]
-            if payload.attachments is not None
-            else None
+    run = await _run_repository(
+        request,
+        lambda repository: repository.edit_user_message(
+            identity,
+            message_id,
+            payload.content,
+            key,
+            attachment_file_ids=(
+                [item.file_id for item in payload.attachments]
+                if payload.attachments is not None
+                else None
+            ),
         ),
     )
     if run.status == "pending":
@@ -290,28 +311,31 @@ async def respond_to_agent_question(
     payload: AgentQuestionResponse,
     request: Request,
     identity: CurrentIdentity,
-    db: Db,
     idempotency_key: IdempotencyKey = None,
 ) -> AgentQuestionResult:
     runtime = _runtime(request)
     runtime.require_available()
     key = require_idempotency_key(idempotency_key)
-    repository = AgentRepository(db)
-    replay = repository.preflight_question_response(
-        identity,
-        question_id,
-        payload,
-        key,
+    replay = await _run_repository(
+        request,
+        lambda repository: repository.preflight_question_response(
+            identity,
+            question_id,
+            payload,
+            key,
+        ),
     )
     if replay is not None:
         runtime.kick(replay.run_id)
         return replay
-    db.rollback()
-    result, event = repository.respond_question(
-        identity,
-        question_id,
-        payload,
-        key,
+    result, event = await _run_repository(
+        request,
+        lambda repository: repository.respond_question(
+            identity,
+            question_id,
+            payload,
+            key,
+        ),
     )
     await runtime.publish_persisted(result.run_id, event)
     runtime.kick(result.run_id)
@@ -323,13 +347,15 @@ async def cancel_agent_run(
     run_id: str,
     request: Request,
     identity: CurrentIdentity,
-    db: Db,
     idempotency_key: IdempotencyKey = None,
 ) -> dict[str, str]:
-    event = AgentRepository(db).cancel_run(
-        identity,
-        run_id,
-        require_idempotency_key(idempotency_key),
+    event = await _run_repository(
+        request,
+        lambda repository: repository.cancel_run(
+            identity,
+            run_id,
+            require_idempotency_key(idempotency_key),
+        ),
     )
     runtime = _runtime(request)
     if runtime.available and event is not None:

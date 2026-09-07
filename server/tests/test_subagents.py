@@ -868,6 +868,15 @@ def test_sse_gap_replaces_snapshot_before_advancing_cursor(settings, epoch_chang
     with TestClient(application) as client:
         created = start(client)
         assert started.wait(5)
+        # The model signal precedes the buffered delta's database commit.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            with application.state.database.session_factory() as db:
+                if db.get(AgentRun, created["run"]["id"]).draft_markdown == "seed":
+                    break
+            time.sleep(0.01)
+        else:
+            pytest.fail("Initial model delta was not persisted")
         response = client.get(f"/api/v1/agent/runs/{created['run']['id']}/stream")
         blocks = response.text.strip().split("\n\n")
         assert "event: snapshot" in blocks[1]

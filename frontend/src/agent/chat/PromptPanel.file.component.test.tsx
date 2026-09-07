@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { CornAgentApiError } from '../../api/transport'
+import { I18nProvider, useI18n } from '../../i18n'
 
 import type { AgentFileInputCapabilities, AgentUploadedFile } from '../types'
 import { PromptPanel } from './PromptPanel'
@@ -90,6 +92,23 @@ it('does not expose the unimplemented voice action from the shared prompt toolba
   render(<Harness onSubmit={vi.fn()} remove={vi.fn(async () => undefined)} upload={vi.fn()} />)
 
   expect(screen.queryByRole('button', { name: '语音输入' })).not.toBeInTheDocument()
+})
+
+it('localizes upload errors without discarding files or retrying on language change', async () => {
+  function Toggle() {
+    const { toggleLocale } = useI18n()
+    return <button onClick={toggleLocale}>Language</button>
+  }
+  const upload = vi.fn().mockRejectedValue(new CornAgentApiError(408, 'file_upload_timeout', 'raw upload error'))
+  const remove = vi.fn(async () => undefined)
+  render(<I18nProvider><Toggle /><Harness onSubmit={vi.fn()} remove={remove} upload={upload} /></I18nProvider>)
+  await userEvent.upload(screen.getByLabelText('选择文件'), new File(['pdf'], 'brief.pdf', { type: 'application/pdf' }))
+  expect(await screen.findByText('brief.pdf 处理失败')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '重试处理 brief.pdf' })).toHaveAttribute('title', '文件上传超时，请检查网络后重试。')
+  await userEvent.click(screen.getByRole('button', { name: 'Language' }))
+  expect(screen.getByRole('button', { name: 'Retry brief.pdf' })).toHaveAttribute('title', 'The file upload timed out. Check your connection and retry.')
+  expect(upload).toHaveBeenCalledTimes(1)
+  expect(remove).not.toHaveBeenCalled()
 })
 
 it('uploads and sends a pure image, then releases the local preview', async () => {

@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react'
+import { apiErrorMessage } from '../../api/transport'
 import { useI18n } from '../../i18n'
 import { localizeSystemMessage } from '../../i18n/systemMessages'
 
 /** Keep failed operations recoverable and prevent duplicate submissions. */
 export function useMessageAction() {
-  const { t, locale } = useI18n()
+  const { t, locale, text } = useI18n()
   const inFlight = useRef(false)
   const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ reason: unknown } | null>(null)
   const execute = async (operation: () => Promise<void>) => {
     if (inFlight.current) return false
     inFlight.current = true
@@ -17,7 +18,7 @@ export function useMessageAction() {
       await operation()
       return true
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '')
+      setError({ reason })
       return false
     } finally {
       inFlight.current = false
@@ -26,7 +27,8 @@ export function useMessageAction() {
   }
   return {
     execute, pending,
-    error: error === null ? null : error ? localizeSystemMessage(error, locale) : t('messageActionFailed'),
+    error: error === null ? null : apiErrorMessage(error.reason,
+      error.reason instanceof Error ? localizeSystemMessage(error.reason.message, locale) : t('messageActionFailed'), text),
     clearError: () => setError(null),
   }
 }

@@ -1,4 +1,8 @@
 <p align="center">
+  <strong lang="en">English</strong> · <a href="README.zh-CN.md" lang="zh-CN">简体中文</a>
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cornagent-lockup-dark.svg" />
     <img src="assets/brand/cornagent-lockup.svg" alt="CornAgent" width="360" />
@@ -6,54 +10,54 @@
 </p>
 
 <p align="center">
-  <strong>可独立运行，也能嵌入业务页面的开源 Web Agent。</strong><br />
-  从实时对话到工具调用、并行子任务与持久化恢复，前后端一并提供。
+  <strong>An open-source web agent that runs on its own or inside your application.</strong><br />
+  Frontend and backend included, with streaming conversations, tool calls, parallel subtasks, and durable recovery.
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-171918?style=flat-square" alt="MIT 许可证" /></a>
-  <img src="https://img.shields.io/badge/Python-3.12%2B-171918?style=flat-square" alt="Python 3.12 及以上" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-171918?style=flat-square" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/Python-3.12%2B-171918?style=flat-square" alt="Python 3.12 or later" />
   <img src="https://img.shields.io/badge/React-19-171918?style=flat-square" alt="React 19" />
 </p>
 
 <p align="center">
-  <a href="#快速开始">快速开始</a> ·
-  <a href="#嵌入业务页面">嵌入页面</a> ·
-  <a href="docs/subagents.md">扩展工具</a> ·
-  <a href="#故障恢复与数据持久化">故障恢复</a> ·
-  <a href="#文档">文档</a>
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#embed-in-your-application">Integration</a> ·
+  <a href="#tools-and-subtasks">Tools</a> ·
+  <a href="#recovery-and-data-persistence">Recovery</a> ·
+  <a href="#documentation">Documentation</a>
 </p>
 
 <p align="center">
   <a href="https://cornagent.xiaotongyu.com/rendering">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/rendering-dark.gif" />
-      <img src="docs/screenshots/rendering-light.gif" alt="CornAgent 英文演示：思考、工具调用、流式回答与过程自动收起，循环播放" width="960" />
+      <img src="docs/screenshots/rendering-light.gif" alt="Looping CornAgent demo in English: reasoning, tool calls, streaming responses, and automatically collapsing process details" width="960" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <a href="https://cornagent.xiaotongyu.com/rendering">查看 Demo 演示</a>
+  <a href="https://cornagent.xiaotongyu.com/rendering">View the Demo</a>
 </p>
 
-## 为什么使用 CornAgent
+## Why CornAgent?
 
-搭建 Agent 产品，除了模型调用，还需要处理会话、流式事件、工具执行、暂停、恢复和界面交互。CornAgent 将这些能力组织成一个可独立安装的 React + FastAPI 项目，聊天页与侧边栏共享同一套运行时。
+Building an agent product takes more than calling a model. It also requires sessions, streaming events, tool execution, pausing, recovery, and user interactions. CornAgent brings these capabilities together in a standalone React + FastAPI project, with a shared runtime for the chat page and sidebar.
 
-| 能力 | 已提供的行为 |
+| Capability | Included behavior |
 | --- | --- |
-| 实时对话 | SSE 流式回复、思考过程、工具分组，以及 Markdown、代码块和表格渲染 |
-| 暂停与恢复 | Agent 提问后等待用户；支持刷新恢复与服务重启后的安全检查点接管，见[恢复边界](#故障恢复与数据持久化) |
-| 并行子任务 | 主 Agent 派发、等待和收取子任务结果；支持取消、历史恢复与过程展示 |
-| 会话与分支 | 历史分页、编辑消息、重新生成、切换分支与删除会话 |
-| 图片与 PDF | 上传附件，按需分页读取 PDF；本地或 S3 兼容存储 |
-| 页面内集成 | 独立聊天页与可调整宽度的侧边栏共用 Provider、会话和消息组件 |
-| 界面偏好 | 中英文、深浅主题、可折叠导航与窄屏布局 |
+| Live conversations | SSE streaming, reasoning, tool groups, and Markdown, code block, and table rendering |
+| Pause and resume | Agents wait for user answers; page refresh recovery and safe checkpoint takeover after service restarts. See [recovery boundaries](#recovery-and-data-persistence) |
+| Parallel subtasks | The main agent dispatches subtasks, waits for them, and collects results; cancellation, history recovery, and progress display are supported |
+| Sessions and branches | Paginated history, message editing, response regeneration, branch switching, and session deletion |
+| Images and PDFs | Attachment uploads, on-demand paginated PDF reading, and local or S3-compatible storage |
+| Embedded integration | A standalone chat page and resizable sidebar share the same provider, sessions, and message components |
+| Interface preferences | English and Simplified Chinese, light and dark themes, collapsible navigation, and narrow-screen layouts |
 
-## 快速开始
+## Quick Start
 
-准备 **Python 3.12、uv、Node.js 22+、PostgreSQL 和 Redis**。已有本机 PostgreSQL / Redis 时，可以直接使用。
+Install **Python 3.12, uv, Node.js 22+, PostgreSQL, and Redis**. You can use existing local PostgreSQL and Redis instances.
 
 ```sh
 git clone https://github.com/XiaoTongYuCode/CornAgent.git
@@ -61,31 +65,31 @@ cd CornAgent
 cp -n .env.example .env
 ```
 
-编辑根目录 `.env`，填入模型 API 密钥，并确认数据库与 Redis 连接。配置完成后：
+Edit `.env` in the project root to set your model API key and verify the PostgreSQL and Redis connection settings. Then run:
 
 ```sh
 make setup
 make dev
 ```
 
-打开 **[http://127.0.0.1:5173/chat](http://127.0.0.1:5173/chat)**。
+Open **[http://127.0.0.1:5173/chat](http://127.0.0.1:5173/chat)**.
 
-`make setup` 安装锁定的前后端依赖，创建 `cornagent` 数据库并执行迁移。默认 PostgreSQL 使用当前系统用户、本机 5432 端口；Redis 使用本机 6379 端口。
+`make setup` installs the locked frontend and backend dependencies, creates the `cornagent` database, and applies migrations. By default, PostgreSQL uses the current system user on local port 5432; Redis uses local port 6379.
 
-### 模型与配置
+### Models and Configuration
 
-所有配置集中在根目录 [.env.example](.env.example)，本机使用 `.env` 覆盖；系统环境变量优先。修改配置后重启服务。
+All configuration options are listed in [.env.example](.env.example) at the project root. Use `.env` for local overrides; system environment variables take precedence. Restart the service after changing configuration.
 
-- **模型**：通过 LiteLLM 接入，默认配置使用 DeepSeek，也可连接兼容 OpenAI 的聊天与工具调用接口。图片输入需要模型支持视觉能力。
-- **持久化**：PostgreSQL 保存会话、消息与运行状态，Redis Stream 传输实时事件。
-- **附件**：支持本地文件系统和 S3 兼容对象存储。
-- **运行参数**：监听地址、端口、并发、超时、上下文预算及附件限制均可配置。
+- **Models:** Connected through LiteLLM. The default configuration uses DeepSeek; OpenAI-compatible chat and tool-calling APIs are also supported. Image input requires a vision-capable model.
+- **Persistence:** PostgreSQL stores sessions, messages, and run state; Redis Streams deliver live events.
+- **Attachments:** Local filesystem and S3-compatible object storage are supported.
+- **Runtime settings:** Listening addresses, ports, concurrency, timeouts, context budgets, and attachment limits are configurable.
 
-模型密钥只在服务端使用，`.env` 不进入版本控制。未配置模型密钥时，服务仍能启动并读取历史，界面会显示 Agent 暂不可用。
+Model API keys are used only on the server, and `.env` is excluded from version control. Without a model API key, the service can still start and load history; the interface indicates that the agent is unavailable.
 
-## 嵌入业务页面
+## Embed in Your Application
 
-在本项目中，使用三个组件即可在页面内接入 Agent：
+Within this project, use three components to add an agent to a page:
 
 ```tsx
 import { AgentLauncher, AgentSidebar, CornAgentProvider } from './agent'
@@ -95,7 +99,7 @@ export default function App() {
   return (
     <CornAgentProvider>
       <main>
-        <h1>我的业务页面</h1>
+        <h1>My Application</h1>
         <AgentLauncher />
       </main>
       <AgentSidebar />
@@ -104,82 +108,82 @@ export default function App() {
 }
 ```
 
-同一 Provider 下的聊天页、按钮与面板共享会话。自定义 API 路径、请求适配器和页面布局，见 **[前端接入指南](docs/frontend-integration.md)**。组件随源码提供，当前没有独立的 npm 发布包。
+The chat page, launcher, and panel share sessions under the same provider. For custom API paths, request adapters, and page layouts, see the **[frontend integration guide](docs/frontend-integration.md)** (Simplified Chinese). Components are provided as source code; there is currently no standalone npm package.
 
-| 页面 | 用途 |
+| Route | Purpose |
 | --- | --- |
-| `/chat` | 首页与新对话；首次发送时创建会话 |
-| `/chat/:id` | 对话详情、实时过程、提问回答与消息分支 |
-| `/sidebar` | 在业务页面中打开 Agent 面板的完整示例 |
-| `/rendering` | 用合成内容演示流式文字、工具标题与过程折叠 |
+| `/chat` | Home and new conversations; a session is created when the first message is sent |
+| `/chat/:id` | Conversation details, live progress, user questions and answers, and message branches |
+| `/sidebar` | A complete example of opening the agent panel within an application page |
+| `/rendering` | Synthetic content demonstrating streaming text, tool titles, and process collapsing |
 
-## 工具与子任务
+## Tools and Subtasks
 
-内置 `ask_user`、`read_file`、`mock_web_search`，以及五个子任务编排工具。主 Agent 可以继续工作，再按需等待和收取子任务结果；子任务也有独立的持久化状态与取消机制。
+Built-in tools include `ask_user`, `read_file`, `mock_web_search`, and five subtask orchestration tools. The main agent can continue working, then wait for and collect subtask results as needed. Subtasks have their own durable state and cancellation mechanism.
 
-`mock_web_search` 返回固定的虚构资料，用于演示搜索与任务编排，界面和模型提示均会标注“模拟”。主 Agent 和子 Agent 的推理仍使用你配置的模型接口。
+`mock_web_search` returns fixed, fictional material for demonstrating search and task orchestration. Both the interface and model prompts identify it as simulated. Reasoning by the main agent and subagents still uses your configured model API.
 
-工具注册、参数协议、子任务生命周期与演示提示见 **[子任务与工具扩展](docs/subagents.md)**。
+For tool registration, parameter contracts, subtask lifecycles, and demo prompts, see **[subtasks and tool extensions](docs/subagents.md)** (Simplified Chinese).
 
-## 运行架构
+## Architecture
 
 ```text
-React 聊天页 / Agent 侧边栏
-            │ JSON · 文件上传 · SSE
+React Chat Page / Agent Sidebar
+            │ JSON · File Uploads · SSE
             ▼
-       FastAPI / Agent 运行时
-            ├── LiteLLM → 模型与工具调用
-            ├── PostgreSQL → 会话、消息树、检查点与任务状态
-            ├── Redis Stream → 实时事件与有限重放
-            └── 本地文件系统 / S3 → 私有附件
+       FastAPI / Agent Runtime
+            ├── LiteLLM → Models and tool calls
+            ├── PostgreSQL → Sessions, message trees, checkpoints, and task state
+            ├── Redis Streams → Live events and bounded replay
+            └── Local Filesystem / S3 → Private attachments
 ```
 
-PostgreSQL 是持久状态的事实来源，Redis 负责实时事件传输。页面刷新与服务重启的恢复行为见下文。
+PostgreSQL is the source of truth for durable state; Redis handles live event delivery. Recovery after page refreshes and service restarts is described below.
 
-详细边界见 [架构](docs/architecture.md)、[运行时](docs/runtime.md) 与 [文件存储](docs/storage.md)。
+For detailed boundaries, see [architecture](docs/architecture.md), [runtime](docs/runtime.md), and [file storage](docs/storage.md) (Simplified Chinese).
 
-## 故障恢复与数据持久化
+## Recovery and Data Persistence
 
-会话、消息分支、运行检查点、待回答问题与子任务状态保存在 PostgreSQL。应用进程宕机重启后，后台协调器检查过期租约，从安全检查点接管可恢复的运行；租约与递增的执行凭证（fence）阻止旧执行器继续写入运行状态。
+Sessions, message branches, run checkpoints, pending questions, and subtask state are stored in PostgreSQL. After an application process crashes and restarts, a background reconciler checks expired leases and takes over recoverable runs from safe checkpoints. Leases and monotonically increasing fencing tokens prevent stale executors from continuing to write run state.
 
-| 中断场景 | 恢复行为 |
+| Interruption | Recovery behavior |
 | --- | --- |
-| 页面刷新、SSE 断线或 Redis 事件丢失 | 重连时先读取数据库快照，再接续增量事件；已落库的会话事实保留 |
-| 模型回复生成中宕机 | 从安全检查点重试中断的模型轮次；未完成草稿可能被替换，不保证逐字续写 |
-| 等待用户回答时重启 | 保留问题与等待状态；用户回答后继续同一次运行 |
-| 等待子任务时重启 | 恢复任务状态并继续协调；已完成结果复用，租约过期的只读子任务可在原截止时间内重跑 |
-| 普通工具批次执行中宕机 | 外部操作结果无法确定时，将当前运行标记为失败，保留会话历史；不自动重放，避免重复产生副作用 |
+| Page refresh, SSE disconnect, or lost Redis events | Reconnection reads a database snapshot first, then resumes incremental events; committed session data is retained |
+| Crash during model response generation | Retries the interrupted model turn from a safe checkpoint; unfinished drafts may be replaced, with no guarantee of word-for-word continuation |
+| Restart while waiting for a user answer | Preserves the question and waiting state; the same run continues after the user answers |
+| Restart while waiting for subtasks | Restores task state and resumes coordination; completed results are reused, and read-only subtasks with expired leases may rerun within their original deadlines |
+| Crash during an ordinary tool batch | If the outcome of external operations is uncertain, marks the current run as failed and retains session history; does not automatically replay the batch, avoiding duplicate side effects |
 
-**会话数据保留与当前运行自动继续是两项不同的保证。** 对执行中断的普通工具，需要先核实外部操作结果再决定是否重试；运行失败不表示外部操作一定没有发生。
+**Retaining session data and automatically continuing the current run are separate guarantees.** Before retrying an interrupted ordinary tool, verify the outcome of its external operation. A failed run does not mean the external operation never happened.
 
-恢复以 PostgreSQL 和附件存储完好、重启后仍连接同一份持久化数据为前提；继续执行还需要 Redis、模型等依赖恢复可用。数据库及附件应使用持久存储，多实例共享附件卷或 S3 兼容桶。备份必须同时覆盖数据库与附件，不能依赖容器临时文件系统。
+Recovery requires intact PostgreSQL and attachment storage, with the restarted service connecting to the same persisted data. Continued execution also requires dependencies such as Redis and the model API to become available again. Use persistent storage for the database and attachments; multiple instances must share an attachment volume or S3-compatible bucket. Backups must cover both the database and attachments. Do not rely on an ephemeral container filesystem.
 
-上述机制覆盖应用进程故障恢复。数据库或磁盘损毁、整机丢失等灾难需要部署方配置备份、存储高可用与恢复演练；项目不承诺任意故障下零数据丢失或固定恢复时间。
+These mechanisms cover application process failures. Disasters such as database or disk corruption and host loss require deployment-specific backups, highly available storage, and recovery drills. The project does not guarantee zero data loss or a fixed recovery time under arbitrary failures.
 
-检查点、租约与工具失败语义见 [Agent 运行时](docs/runtime.md)，持久存储要求见 [文件存储](docs/storage.md)，已记录的恢复测试范围见 [测试与验证](docs/verification.md)。
+See [agent runtime](docs/runtime.md) for checkpoint, lease, and tool failure semantics; [file storage](docs/storage.md) for persistence requirements; and [testing and verification](docs/verification.md) for documented recovery test coverage (Simplified Chinese).
 
-## 开发与构建
+## Development and Builds
 
 ```sh
-make check   # 后端 lint / 测试，前端 lint / 测试
-make build   # TypeScript 检查与前端生产构建
+make check   # Backend lint and tests; frontend lint and tests
+make build   # TypeScript checks and frontend production build
 ```
 
-构建后，可以由 FastAPI 同源托管前端：
+After building, FastAPI can serve the frontend from the same origin:
 
 ```sh
 cd server
 CORNAGENT_SERVER_RELOAD=false uv run python -m app.serve
 ```
 
-升级已有安装时，先停止服务，再执行数据库迁移：
+When upgrading an existing installation, stop the service before applying database migrations:
 
 ```sh
 cd server
 uv run alembic upgrade head
 ```
 
-真实 PostgreSQL / Redis 回归会创建并清理自己的随机 schema，不清空已有数据库或 Redis：
+Regression tests against real PostgreSQL and Redis create and clean up their own random schema without clearing existing databases or Redis data:
 
 ```sh
 cd server
@@ -187,26 +191,30 @@ CORNAGENT_TEST_POSTGRES_URL=postgresql+psycopg://localhost:5432/cornagent \
 CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 ```
 
-项目默认监听本机，所有浏览器共用一个工作区。对外提供服务时，需由宿主系统配置访问控制；当前没有内置登录与多租户隔离。
+By default, the project listens locally, and all browsers share one workspace. When exposing the service externally, configure access controls in the host system. Built-in login and multi-tenant isolation are not currently provided.
 
-## 文档
+## Documentation
 
-| 文档 | 内容 |
+The detailed guides below are currently available in **Simplified Chinese**.
+
+| Guide | Contents |
 | --- | --- |
-| [前端说明](frontend/README.md) | 页面组织、主题、多语言与消息交互 |
-| [前端接入](docs/frontend-integration.md) | Provider、开启按钮、侧边栏与宿主配置 |
-| [后端说明](server/README.md) | 服务启动、依赖、配置与检查 |
-| [架构说明](docs/architecture.md) | 模块分工与请求链路 |
-| [Agent 运行时](docs/runtime.md) | 状态机、恢复、SSE 与消息树 |
-| [子任务与工具](docs/subagents.md) | 并行任务、工具扩展与演示 |
-| [文件存储](docs/storage.md) | 附件读写、会话隔离与回收 |
-| [测试与验证](docs/verification.md) | 回归范围与界面验证记录 |
-| [品牌资产](assets/brand/README.md) | SVG 图标、字标与使用方式 |
+| [Frontend](frontend/README.md) | Page organization, themes, localization, and message interactions |
+| [Frontend integration](docs/frontend-integration.md) | Provider, launcher, sidebar, and host configuration |
+| [Backend](server/README.md) | Service startup, dependencies, configuration, and checks |
+| [Architecture](docs/architecture.md) | Module responsibilities and request flow |
+| [Agent runtime](docs/runtime.md) | State machine, recovery, SSE, and message trees |
+| [Subtasks and tools](docs/subagents.md) | Parallel tasks, tool extensions, and demos |
+| [File storage](docs/storage.md) | Attachment reads and writes, session isolation, and cleanup |
+| [Testing and verification](docs/verification.md) | Regression coverage and interface verification records |
+| [Brand assets](assets/brand/README.md) | SVG icons, wordmarks, and usage |
 
-## 参与贡献
+## Contributing
 
-欢迎通过 Issue 提交问题或讨论功能，通过 Pull Request 贡献改进。提交前运行 `make check` 与 `make build`；涉及状态机、SSE、存储或消息分支时，同时验证刷新与恢复行为。请勿提交密钥、用户会话、上传文件或运行时数据。
+Use issues to report bugs or discuss features, and pull requests to contribute improvements. Run `make check` and `make build` before submitting. Changes to the state machine, SSE, storage, or message branches should also verify refresh and recovery behavior. Do not commit secrets, user conversations, uploaded files, or runtime data.
 
-## 许可
+When updating this README, keep the [Simplified Chinese version](README.zh-CN.md) in sync, including examples, links, and behavior descriptions.
 
-CornAgent 使用 **[MIT 许可证](LICENSE)**。移植来源与第三方依赖说明见 [NOTICE](NOTICE)。
+## License
+
+CornAgent is released under the **[MIT License](LICENSE)**. See [NOTICE](NOTICE) for attribution to source projects and third-party dependencies.

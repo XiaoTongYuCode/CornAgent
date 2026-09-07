@@ -1,7 +1,10 @@
 """Session attachment upload, extraction and lifecycle API."""
 
+import asyncio
 import hashlib
 import warnings
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from io import BytesIO
 from typing import Literal
 from uuid import NAMESPACE_URL, uuid5
@@ -11,6 +14,7 @@ from fastapi.responses import Response
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentIdentity, Db
@@ -20,6 +24,29 @@ from app.persistence.errors import DomainError
 from app.persistence.models import FileResource, utcnow
 
 router = APIRouter(prefix="/files")
+
+
+async def _run_file_db[T](request: Request, operation: Callable[[Session], T]) -> T:
+    def execute() -> T:
+        with request.app.state.database.session_factory() as db:
+            return operation(db)
+
+    return await run_in_threadpool(execute)
+
+
+@asynccontextmanager
+async def _file_admission(request: Request, admission: asyncio.Semaphore) -> AsyncIterator[None]:
+    try:
+        async with asyncio.timeout(request.app.state.settings.file_admission_timeout_seconds):
+            await admission.acquire()
+    except TimeoutError as exc:
+        raise DomainError(
+            "file_operations_busy", "File operations are busy. Please retry.", status_code=503
+        ) from exc
+    try:
+        yield
+    finally:
+        admission.release()
 
 
 class FileCreate(BaseModel):
@@ -120,25 +147,51 @@ def create_file(
 
 
 @router.put("/{file_id}/content")
-async def upload_content(file_id: str, request: Request, identity: CurrentIdentity, db: Db):
-    item = await run_in_threadpool(owned_file, db, identity, file_id)
-    if item.state not in {"pending", "stored"}:
-        raise DomainError("file_not_writable", "A claimed file cannot be changed.", status_code=409)
-    settings = request.app.state.settings
-    limit = (
-        settings.agent_file_pdf_max_bytes
-        if item.mime_type == "application/pdf"
-        else settings.agent_file_image_max_bytes
-    )
-    db.rollback()
-    data = bytearray()
-    async for chunk in request.stream():
-        if len(data) + len(chunk) > limit:
+async def upload_content(file_id: str, request: Request, identity: CurrentIdentity):
+    def authorize(db):
+        item = owned_file(db, identity, file_id)
+        if item.state not in {"pending", "stored"}:
             raise DomainError(
-                "file_too_large", "File size exceeds the configured limit.", status_code=413
+                "file_not_writable", "A claimed file cannot be changed.", status_code=409
             )
-        data.extend(chunk)
-    return await run_in_threadpool(_store_upload, file_id, bytes(data), request, identity, db)
+        settings = request.app.state.settings
+        return (
+            settings.agent_file_pdf_max_bytes
+            if item.mime_type == "application/pdf"
+            else settings.agent_file_image_max_bytes
+        )
+
+    # Slow senders occupy only a bounded body slot, never a database connection
+    # or a persistence slot. Keep the body slot until its buffer is released.
+    async with _file_admission(request, request.app.state.file_body_admission):
+        limit = await _run_file_db(request, authorize)
+        payload = await _read_content(request, limit)
+        async with _file_admission(request, request.app.state.file_upload_admission):
+            return await _run_file_db(
+                request, lambda db: _store_upload(file_id, payload, request, identity, db)
+            )
+
+
+async def _read_content(request: Request, limit: int) -> bytes:
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise DomainError(
+            "file_too_large", "File size exceeds the configured limit.", status_code=413
+        )
+    data = bytearray()
+    try:
+        async with asyncio.timeout(request.app.state.settings.file_upload_body_timeout_seconds):
+            async for chunk in request.stream():
+                if len(data) + len(chunk) > limit:
+                    raise DomainError(
+                        "file_too_large", "File size exceeds the configured limit.", status_code=413
+                    )
+                data.extend(chunk)
+    except TimeoutError as exc:
+        raise DomainError(
+            "file_upload_timeout", "The upload body was not received in time.", status_code=408
+        ) from exc
+    return bytes(data)
 
 
 def _store_upload(file_id, payload, request, identity, db):
@@ -198,33 +251,59 @@ def _store_upload(file_id, payload, request, identity, db):
 
 
 @router.post("/{file_id}/extract")
-def extract_file(file_id: str, request: Request, identity: CurrentIdentity, db: Db):
-    item = owned_file(db, identity, file_id, lock=True)
-    if item.mime_type != "application/pdf" or item.state not in {"stored", "ready"}:
-        raise DomainError(
-            "file_not_extractable", "Upload a PDF before extracting it.", status_code=409
+async def extract_file(file_id: str, request: Request, identity: CurrentIdentity):
+    def authorize(db):
+        item = owned_file(db, identity, file_id)
+        if item.mime_type != "application/pdf" or item.state not in {"stored", "ready"}:
+            raise DomainError(
+                "file_not_extractable", "Upload a PDF before extracting it.", status_code=409
+            )
+        return file_out(item), item.storage_key, item.sha256
+
+    async with _file_admission(request, request.app.state.file_extraction_admission):
+        target, storage_key, digest = await _run_file_db(request, authorize)
+        if target["extraction_status"] == "ready":
+            return target
+        payload = await run_in_threadpool(request.app.state.file_store.read, storage_key)
+        if len(payload) != target["size_bytes"] or hashlib.sha256(payload).hexdigest() != digest:
+            raise DomainError(
+                "file_integrity_error",
+                "Stored content failed integrity validation.",
+                status_code=409,
+            )
+        settings = request.app.state.settings
+        result, failure = None, None
+        try:
+            result = await run_in_threadpool(
+                extract_pdf,
+                payload,
+                max_pages=settings.agent_file_pdf_max_pages,
+                max_chars=settings.agent_file_extracted_max_chars,
+                timeout_seconds=settings.agent_file_extraction_timeout_seconds,
+            )
+        except DomainError as exc:
+            failure = exc
+        # Recheck under a short row lock after parsing: deletion, collection or
+        # another instance completing extraction must not be overwritten.
+        return await _run_file_db(
+            request, lambda db: _finish_extraction(db, identity, file_id, digest, result, failure)
         )
-    if item.extraction_status == "ready":
-        return file_out(item)
-    settings = request.app.state.settings
-    payload = request.app.state.file_store.read(item.storage_key)
-    if hashlib.sha256(payload).hexdigest() != item.sha256:
+
+
+def _finish_extraction(db, identity, file_id, digest, result, failure):
+    item = owned_file(db, identity, file_id, lock=True)
+    if item.state not in {"stored", "ready"} or item.sha256 != digest:
         raise DomainError(
             "file_integrity_error", "Stored content failed integrity validation.", status_code=409
         )
-    item.extraction_status = "pending"
-    try:
-        result = extract_pdf(
-            payload,
-            max_pages=settings.agent_file_pdf_max_pages,
-            max_chars=settings.agent_file_extracted_max_chars,
-            timeout_seconds=settings.agent_file_extraction_timeout_seconds,
-        )
-    except DomainError as exc:
+    if item.extraction_status == "ready":
+        return file_out(item)
+    if failure is not None:
         item.extraction_status = "failed"
-        item.extraction_error_code = exc.code
+        item.extraction_error_code = failure.code
         db.commit()
-        raise
+        raise failure
+    assert result is not None
     encoded = result.markdown.encode("utf-8")
     item.extracted_markdown = result.markdown
     item.extraction_parser = result.parser

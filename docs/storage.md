@@ -2,6 +2,21 @@
 
 状态：active
 
+## 并发与等待边界
+
+接收上传请求体与写入存储使用独立的实例级并发名额，默认各 2 个；请求体缓冲名额保留至写入完成，
+因此内存中的文件缓冲数量始终有界。读取请求体时不占用数据库连接或写入名额。
+请求体默认 60 秒超时，返回 `file_upload_timeout`（408）；并发名额默认等待 5 秒，
+超时返回 `file_operations_busy`（503）。错误或客户端取消都会释放名额。
+
+PDF 提取默认每实例 1 个并发，取得名额后才访问数据库；读取文件与解析期间不保留数据库连接和行锁。
+解析完成后重新加锁校验文件状态及摘要，已删除文件不会被恢复，其他实例已完成的提取结果直接复用。
+解析失败状态仍持久化，可重试；未完成的进程内解析在服务重启后可重新发起。
+
+配置项见 `.env.example`：`CORNAGENT_FILE_BODY_MAX_CONCURRENCY`、`CORNAGENT_FILE_UPLOAD_MAX_CONCURRENCY`、
+`CORNAGENT_FILE_EXTRACTION_MAX_CONCURRENCY`、`CORNAGENT_FILE_UPLOAD_BODY_TIMEOUT_SECONDS` 和
+`CORNAGENT_FILE_ADMISSION_TIMEOUT_SECONDS`。并发上限按进程生效；数据库行锁和文件完整性检查保护跨实例提交。
+
 ## 选择
 
 PostgreSQL 管理文件元数据与生命周期，私有对象存储保存原文件。默认使用本地文件系统，也可配置 S3 兼容桶。

@@ -158,6 +158,11 @@ def create_app(
     app.state.settings = settings
     app.state.database = database
     app.state.file_store = store
+    app.state.file_body_admission = asyncio.Semaphore(settings.file_body_max_concurrency)
+    app.state.file_upload_admission = asyncio.Semaphore(settings.file_upload_max_concurrency)
+    app.state.file_extraction_admission = asyncio.Semaphore(
+        settings.file_extraction_max_concurrency
+    )
     app.state.agent_runtime = runtime
     app.state.agent_run_rate_limiter = rate_limiter
     app.state.agent_stream_connection_limiter = AgentStreamConnectionLimiter(

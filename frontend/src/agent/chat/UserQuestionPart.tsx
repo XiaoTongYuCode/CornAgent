@@ -1,7 +1,9 @@
 import { useI18n } from '../../i18n'
+import { apiErrorMessage } from '../../api/transport'
+import { localizeSystemMessage } from '../../i18n/systemMessages'
 import { CheckCircle2, CornerDownLeft, Pencil, X, type LucideIcon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Input, Typography } from 'antd'
+import { Button, Input, Tooltip, Typography } from 'antd'
 
 import { CollapsibleContent } from './CollapsibleContent'
 import {
@@ -57,7 +59,7 @@ export function UserQuestionPart({
   open = true,
   part,
 }: UserQuestionPartProps) {
-  const { t } = useI18n()
+  const { t, locale, text } = useI18n()
   const metadata = part.metadata
   const questionId = getMetadataString(metadata, 'question_id')
   const status = getUserQuestionStatus(part)
@@ -67,7 +69,7 @@ export function UserQuestionPart({
   const [customContent, setCustomContent] = useState('')
   const [draftSelectedOptionId, setDraftSelectedOptionId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<{ reason: unknown } | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const isSubmittingRef = useRef(false)
   const isPending = status === 'pending'
@@ -114,12 +116,12 @@ export function UserQuestionPart({
       await onRespondUserQuestion(response)
       setCustomContent('')
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : t('submitFailed'))
+      setSubmitError({ reason: error })
     } finally {
       isSubmittingRef.current = false
       setIsSubmitting(false)
     }
-  }, [onRespondUserQuestion, setCustomContent, setIsSubmitting, setSubmitError, t])
+  }, [onRespondUserQuestion, setCustomContent, setIsSubmitting, setSubmitError])
 
   const submitOption = useCallback((option: UserQuestionOption) => {
     if (!questionId || isDisabled) {
@@ -264,6 +266,7 @@ export function UserQuestionPart({
       </div>
       <div className="chat-markdown-message-content__user-question-options">
         {options.map((option, index) => (
+          <Tooltip key={option.id} trigger={['hover', 'focus']} title={<span className="agent-option-tooltip">{option.content}{option.description && <><br />{option.description}</>}</span>}>
           <Button
             aria-pressed={option.id === effectiveSelectedOptionId}
             block
@@ -273,7 +276,6 @@ export function UserQuestionPart({
                 'chat-markdown-message-content__user-question-option--selected',
             ].filter(Boolean).join(' ')}
             disabled={isDisabled}
-            key={option.id}
             onClick={() => {
               submitOption(option)
             }}
@@ -292,6 +294,7 @@ export function UserQuestionPart({
               ) : null}
             </span>
           </Button>
+          </Tooltip>
         ))}
       </div>
       <div className="chat-markdown-message-content__user-question-custom">
@@ -343,7 +346,8 @@ export function UserQuestionPart({
       </div>
       {submitError ? (
         <Typography.Text className="chat-markdown-message-content__user-question-error" role="alert">
-          {submitError}
+          {apiErrorMessage(submitError.reason, submitError.reason instanceof Error
+            ? localizeSystemMessage(submitError.reason.message, locale) : t('submitFailed'), text)}
         </Typography.Text>
       ) : null}
     </div>
