@@ -5,6 +5,7 @@ import { AgentSidebar } from './agent/AgentSidebar'
 import { CornAgentProvider } from './agent/CornAgentProvider'
 import { useAgent } from './agent/AgentContext'
 import { navigate, useMobileLayout, usePathname } from './app/navigation'
+import { ProjectContactLinks } from './app/ProjectContactLinks'
 import { SidebarExamplePage } from './app/SidebarExamplePage'
 import { Sidebar } from './components/Sidebar'
 import { useI18n } from './i18n'
@@ -120,6 +121,7 @@ function Application({ path, sessionId }: { path: string; sessionId: string | nu
           <SidebarExamplePage />
         ) : (
           <AgentChatPage
+            emptyStateFooter={sessionId === null ? <ProjectContactLinks /> : undefined}
             sessionId={sessionId}
             workspace={workspace}
             onSessionChange={changeSession}

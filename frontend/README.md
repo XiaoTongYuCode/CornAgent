@@ -11,7 +11,7 @@ npm run dev
 
 默认 http://127.0.0.1:5173，API 同源代理至 8000。`/chat` 空白对话、`/chat/:id` 历史详情、`/sidebar` 侧边栏范例、`/rendering` Agent 渲染效果。
 
-新对话输入框下方右侧展示 GitHub 仓库与作者 X 主页的图标链接，使用 `@ant-design/icons` 的 `GithubOutlined`、`XOutlined`，在新标签页打开。
+仅项目首页（`/chat`）的新对话输入框下方右侧展示 GitHub 仓库与作者 X 主页的图标链接，使用 `@ant-design/icons` 的 `GithubOutlined`、`XOutlined`，在新标签页打开。链接由应用层传入，通用 Agent 组件与侧边栏不内置作者联系方式。
 
 开发监听地址和端口读取根目录 `.env` 的 `CORNAGENT_FRONTEND_HOST` / `CORNAGENT_FRONTEND_PORT`，API 代理跟随 `CORNAGENT_SERVER_HOST` / `CORNAGENT_SERVER_PORT`。只在 Vite 服务端读取；不会把根目录中的模型、数据库或存储密钥注入前端代码。修改配置后重启 Vite。
 

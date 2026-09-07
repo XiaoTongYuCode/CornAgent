@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import { AgentConversation } from './AgentConversation'
 import { AgentHistoryPicker } from './AgentHistoryPicker'
@@ -8,11 +9,12 @@ import type { AgentWorkspace } from './useAgentWorkspace'
 interface AgentChatPageProps {
   sessionId: string | null
   userName?: string
+  emptyStateFooter?: ReactNode
   workspace: AgentWorkspace
   onSessionChange(sessionId: string | null): void
 }
 
-export function AgentChatPage({ sessionId, userName, workspace, onSessionChange }: AgentChatPageProps) {
+export function AgentChatPage({ sessionId, userName, workspace, onSessionChange, emptyStateFooter }: AgentChatPageProps) {
   const { text, t } = useI18n()
   const currentSession = workspace.session?.id === sessionId ? workspace.session : null
   const listedSession = workspace.sessions.find((session) => session.id === sessionId)
@@ -61,6 +63,6 @@ export function AgentChatPage({ sessionId, userName, workspace, onSessionChange 
     </header>
     {sessionId !== null && !currentSession && workspace.available !== false && !workspace.error
       ? <div className="workspace-loading" role="status"><span className="spinner" />{t('openingChat')}</div>
-      : <AgentConversation focusPrompt={focusPrompt} onSessionChange={onSessionChange} userName={userName} workspace={workspace} />}
+      : <AgentConversation emptyStateFooter={emptyStateFooter} focusPrompt={focusPrompt} onSessionChange={onSessionChange} userName={userName} workspace={workspace} />}
   </div>
 }
