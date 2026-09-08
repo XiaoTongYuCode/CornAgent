@@ -78,6 +78,7 @@ export const messages = {
   loadMoreChats: ['加载更多对话', 'Load more conversations'],
   searchHistoryPlaceholder: ['搜索历史…', 'Search history…'],
   conversationHistory: ['对话历史', 'Conversation history'],
+  historyRefreshFailed: ['对话历史刷新失败。', 'Unable to refresh conversation history.'],
   conversation: ['CornAgent 对话', 'CornAgent conversation'],
   unavailable: ['Agent 暂不可用', 'Agent unavailable'],
   unavailableHelp: [

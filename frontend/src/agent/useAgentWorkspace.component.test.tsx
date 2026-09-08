@@ -429,3 +429,125 @@ it('loads and merges older session pages', async () => {
   ])
   expect(hook.result.current.sessionsNextCursor).toBeNull()
 })
+
+it('keeps authoritative detail loading and deduplicates sends while the sidebar refresh runs in background', async () => {
+  const activeRun = run('created', 'created-session')
+  const detail = session(activeRun.sessionId, activeRun)
+  const pendingDetail = deferred<AgentSessionDetail>()
+  const pendingList = deferred<{ data: AgentSessionDetail[]; nextCursor: null }>()
+  const status = vi.fn(async () => ({ available: true }))
+  const startSession = vi.fn(async () => ({ session: detail, run: activeRun }))
+  const gateway = {
+    status, startSession,
+    listSessions: vi.fn().mockResolvedValueOnce({ data: [], nextCursor: null }).mockReturnValue(pendingList.promise),
+    getSession: vi.fn(() => pendingDetail.promise),
+  } as unknown as HttpAgentGateway
+  const hook = renderHook(() => useAgentWorkspace(gateway, 'principal-1', null))
+  await waitFor(() => expect(hook.result.current.available).toBe(true))
+  let first!: Promise<string>
+  let duplicate!: Promise<string>
+  act(() => {
+    first = hook.result.current.ask('问题', ['file-1'])
+    duplicate = hook.result.current.ask('问题', ['file-1'])
+  })
+  await waitFor(() => expect(gateway.getSession).toHaveBeenCalled())
+  expect(status).toHaveBeenCalledTimes(1)
+  expect(startSession).toHaveBeenCalledTimes(1)
+  expect(startSession.mock.calls[0]).toEqual(['问题', ['file-1'], expect.any(String), expect.any(AbortSignal)])
+  expect(hook.result.current.session).toBeNull()
+  expect(hook.result.current.busy).toBe(true)
+  await act(async () => {
+    pendingDetail.resolve(detail)
+    expect(await first).toBe(detail.id)
+    expect(await duplicate).toBe(detail.id)
+  })
+  expect(hook.result.current.session?.messages).toEqual(detail.messages)
+  expect(hook.result.current.busy).toBe(false)
+  await act(async () => { pendingList.resolve({ data: [detail], nextCursor: null }) })
+})
+
+it.each([false, null])('rechecks availability %s before admitting a send', async (initial) => {
+  const activeRun = run('new', 'session-new')
+  const detail = session(activeRun.sessionId, activeRun)
+  const initialStatus = deferred<{ available: boolean }>()
+  const status = vi.fn().mockReturnValueOnce(initial === null ? initialStatus.promise : Promise.resolve({ available: initial }))
+    .mockResolvedValue({ available: false })
+  const startSession = vi.fn()
+  const gateway = { status, startSession, listSessions: vi.fn(async () => ({ data: [detail], nextCursor: null })) } as unknown as HttpAgentGateway
+  const hook = renderHook(() => useAgentWorkspace(gateway, 'principal-1', null))
+  await waitFor(() => expect(status).toHaveBeenCalledTimes(1))
+  if (initial === false) await waitFor(() => expect(hook.result.current.available).toBe(false))
+  await act(async () => { await expect(hook.result.current.ask('问题')).rejects.toThrow('尚未配置') })
+  expect(status).toHaveBeenCalledTimes(2)
+  expect(startSession).not.toHaveBeenCalled()
+})
+
+it('propagates server admission failure even with cached availability', async () => {
+  const gateway = {
+    status: vi.fn(async () => ({ available: true })),
+    listSessions: vi.fn(async () => ({ data: [], nextCursor: null })),
+    startSession: vi.fn(async () => { throw new Error('server admission rejected') }),
+    getSession: vi.fn(),
+  } as unknown as HttpAgentGateway
+  const hook = renderHook(() => useAgentWorkspace(gateway, 'principal-1', null))
+  await waitFor(() => expect(hook.result.current.available).toBe(true))
+  await act(async () => { await expect(hook.result.current.ask('问题')).rejects.toThrow('server admission rejected') })
+  expect(hook.result.current.busy).toBe(false)
+  expect(hook.result.current.session).toBeNull()
+  expect(gateway.getSession).not.toHaveBeenCalled()
+})
+
+it('stops a stale availability check from creating a Run after navigation', async () => {
+  const pending = deferred<{ available: boolean }>()
+  const gateway = {
+    status: vi.fn().mockResolvedValueOnce({ available: false }).mockReturnValueOnce(pending.promise).mockResolvedValue({ available: false }),
+    startSession: vi.fn(),
+  } as unknown as HttpAgentGateway
+  const hook = renderHook(({ route }: { route: string | null }) => useAgentWorkspace(gateway, 'principal-1', route), { initialProps: { route: null as string | null } })
+  await waitFor(() => expect(hook.result.current.available).toBe(false))
+  let outcome!: Promise<unknown>
+  act(() => { outcome = hook.result.current.ask('问题').catch((error: Error) => error.name) })
+  hook.rerender({ route: 'different-session' })
+  await act(async () => { pending.resolve({ available: true }); expect(await outcome).toBe('AbortError') })
+  expect(gateway.startSession).not.toHaveBeenCalled()
+  expect(hook.result.current.available).toBe(false)
+})
+
+
+it('reports a sidebar refresh failure without rejecting a successfully created Run', async () => {
+  const activeRun = run('new', 'session-new')
+  const detail = session(activeRun.sessionId, activeRun)
+  const gateway = {
+    status: vi.fn(async () => ({ available: true })),
+    listSessions: vi.fn().mockResolvedValueOnce({ data: [], nextCursor: null }).mockRejectedValue(new Error('list failed')),
+    startSession: vi.fn(async () => ({ session: detail, run: activeRun })),
+    getSession: vi.fn(async () => detail),
+  } as unknown as HttpAgentGateway
+  const hook = renderHook(() => useAgentWorkspace(gateway, 'principal-1', null))
+  await waitFor(() => expect(hook.result.current.available).toBe(true))
+  await act(async () => { expect(await hook.result.current.ask('问题')).toBe(detail.id) })
+  expect(hook.result.current.session?.activeRun?.id).toBe(activeRun.id)
+  expect(hook.result.current.busy).toBe(false)
+  expect(hook.result.current.error).toBe('对话历史刷新失败。')
+})
+
+it('discards a created Run response after the principal changes', async () => {
+  const activeRun = run('new', 'session-new')
+  const detail = session(activeRun.sessionId, activeRun)
+  const pending = deferred<{ session: AgentSessionDetail; run: AgentRun }>()
+  const gateway = {
+    status: vi.fn(async () => ({ available: true })),
+    listSessions: vi.fn(async () => ({ data: [], nextCursor: null })),
+    startSession: vi.fn(() => pending.promise),
+    getSession: vi.fn(),
+  } as unknown as HttpAgentGateway
+  const hook = renderHook(({ principal }: { principal: string }) => useAgentWorkspace(gateway, principal, null), { initialProps: { principal: 'old' } })
+  await waitFor(() => expect(hook.result.current.available).toBe(true))
+  let outcome!: Promise<unknown>
+  act(() => { outcome = hook.result.current.ask('问题').catch((error: Error) => error.name) })
+  hook.rerender({ principal: 'new' })
+  await act(async () => { pending.resolve({ session: detail, run: activeRun }); expect(await outcome).toBe('AbortError') })
+  expect(gateway.getSession).not.toHaveBeenCalled()
+  expect(hook.result.current.session).toBeNull()
+  expect(hook.result.current.busy).toBe(false)
+})

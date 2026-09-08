@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createClientId } from '../client-id'
 import { apiErrorMessage } from '../api/transport'
+import { messages } from '../i18n/catalog'
 import { HttpAgentGateway, toRun, toSnapshot } from './gateway'
 import type { AgentContentPart, AgentFileInputCapabilities, AgentMessage, AgentQuestionResponse, AgentRun, AgentSession, AgentSessionDetail, AgentSessionPage, AgentSnapshot, AgentSseEvent, AgentUploadedFile } from './types'
 
@@ -284,10 +285,14 @@ export function useAgentWorkspace(
       setBusy(true)
       setError(null)
       try {
-        const status = await gateway.status(controller.signal)
-        setAvailable(status.available)
-        setFileInput(status.fileInput ?? null)
-        if (!status.available) throw new Error('CornAgent 尚未配置模型和 Redis。')
+        // Availability is a UI hint; the mutation endpoint enforces admission.
+        if (available !== true) {
+          const status = await gateway.status(controller.signal)
+          controller.signal.throwIfAborted()
+          setAvailable(status.available)
+          setFileInput(status.fileInput ?? null)
+          if (!status.available) throw new Error('CornAgent 尚未配置模型和 Redis。')
+        }
         const routedSessionId = routeSessionId ?? null
         const targetSessionId = options?.createNew
           ? null
@@ -304,23 +309,30 @@ export function useAgentWorkspace(
           sessionId = created.session.id
           run = created.run
         }
-        if (sessionLoadRevision.current !== initialLoadRevision) {
-          await refreshSessions()
-          return sessionId
-        }
+        controller.signal.throwIfAborted()
+        if (sessionLoadRevision.current !== initialLoadRevision) return sessionId
         streamCursor.current = undefined
         sessionIdRef.current = sessionId
         setSnapshot(null)
         const refreshed = await refreshSession(sessionId)
+        controller.signal.throwIfAborted()
         if (refreshed) {
           setSession({ ...refreshed, activeRun: run, activeLeafMessageId: run.assistantMessageId })
           setStreamRevision((value) => value + 1)
         }
-        await refreshSessions()
+        // Sidebar refresh cannot turn a successfully created Run into a send failure.
+        const expectedPrincipalRevision = principalRevision.current
+        void refreshSessions().catch((reason: unknown) => {
+          if (principalRevision.current === expectedPrincipalRevision && sessionIdRef.current === sessionId) {
+            setError(apiErrorMessage(reason, messages.historyRefreshFailed[0]))
+          }
+        })
         return sessionId
       } finally {
-        if (startAbortController.current === controller) startAbortController.current = null
-        setBusy(false)
+        if (startAbortController.current === controller) {
+          startAbortController.current = null
+          setBusy(false)
+        }
       }
     })()
     startPromiseRef.current = operation
@@ -329,7 +341,7 @@ export function useAgentWorkspace(
     }
     void operation.then(releaseOperation, releaseOperation)
     return operation
-  }, [gateway, refreshSession, refreshSessions, routeSessionId, session])
+  }, [available, gateway, refreshSession, refreshSessions, routeSessionId, session])
 
   const ask = useCallback(async (content: string, fileIds: string[] = []) => {
     try { return await start(content, fileIds, { createNew: true }) } catch (reason) {
