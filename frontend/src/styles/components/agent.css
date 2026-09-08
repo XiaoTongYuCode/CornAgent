@@ -314,11 +314,14 @@ html.agent-panel-resizing .app-shell { transition: none; }
 .chat-message-list__turn--user:hover .chat-message-list__message-actions--user,
 .chat-message-list__turn--user:focus-within .chat-message-list__message-actions--user { opacity: 1; pointer-events: auto; }
 .chat-message-list__message-action:disabled { opacity: .4; cursor: default; }
-.chat-message-list__user-editor { align-self: flex-end; width: min(100%, 640px); display: flex; flex-direction: column; gap: 8px; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--panel); }
-.chat-message-list__user-editor-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.chat-message-list__user-editor-input.ant-input { min-width: 0; flex: 1; padding-inline: 0; border: 0; box-shadow: none; }
+.chat-message-list__user-editor { align-self: flex-end; width: min(100%, 640px); display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--panel); }
+.chat-message-list__user-editor-input.ant-input { width: 100%; min-width: 0; padding: 0; border: 0; box-shadow: none; line-height: 1.6; resize: vertical; }
 .chat-message-list__user-editor-input.ant-input:focus { border: 0; box-shadow: none; outline: none; }
-.chat-message-list__edit-buttons { display: flex; flex-shrink: 0; align-items: center; gap: 6px; }
+.chat-message-list__edit-buttons { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.chat-message-list__user-editor .agent-message-attachments { max-width: 100%; justify-content: flex-start; align-items: flex-start; gap: 8px; }
+.chat-message-list__user-editor .agent-message-attachments__image { width: 88px; height: 88px; flex: 0 0 88px; }
+.chat-message-list__user-editor .agent-message-attachments__document { min-width: 0; max-width: min(320px, 100%); }
+.chat-message-list__user-editor .agent-message-attachments__document > svg { flex-shrink: 0; }
 .chat-message-list__action-error { margin: 4px 0; color: var(--danger); font-size: 12px; }
 @media (hover: none) {
   .chat-message-list__message-actions--user { opacity: 1; pointer-events: auto; }
