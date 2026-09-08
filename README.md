@@ -220,3 +220,5 @@ When updating this README, keep the [Simplified Chinese version](README.zh-CN.md
 ## License
 
 CornAgent is released under the **[MIT License](LICENSE)**. See [NOTICE](NOTICE) for attribution to source projects and third-party dependencies.
+
+Optional user accounts are disabled by default. See [authentication configuration and extension points](docs/authentication.md).

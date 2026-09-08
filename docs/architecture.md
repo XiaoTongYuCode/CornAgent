@@ -48,7 +48,7 @@ CornAgent 由 React 前端、FastAPI 服务、PostgreSQL 和 Redis 组成。前�
 
 根目录 `.env` 是统一配置入口，完整模板见 [.env.example](../.env.example)。系统环境变量优先于文件值。模型密钥、数据库连接和对象存储凭据只在服务端使用。
 
-开发环境由 Vite 将 `/api` 代理到 FastAPI；生产构建可直接由 FastAPI 同源托管。应用默认使用固定工作区，宿主系统负责对外访问控制。运行步骤见 [README](../README.md)。
+开发环境由 Vite 将 `/api` 代理到 FastAPI；生产构建可直接由 FastAPI 同源托管。应用默认使用固定共享工作区；可开启[用户系统](authentication.md)，由独立身份适配器提供私有工作区。运行步骤见 [README](../README.md)。
 
 ## 子任务编排
 

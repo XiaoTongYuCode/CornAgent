@@ -435,6 +435,15 @@ async def stream_agent_run(
         visible_cursor = current
         while not await request.is_disconnected():
             now = time.monotonic()
+            if request.app.state.settings.users_enabled:
+                try:
+                    current_identity = await run_in_threadpool(
+                        request.app.state.identity_provider.authenticate, request
+                    )
+                    if current_identity != stream_auth.identity:
+                        return
+                except DomainError:
+                    return
             try:
                 redis_cursor, events = await runtime.read_events(run_id, redis_cursor)
             except Exception:

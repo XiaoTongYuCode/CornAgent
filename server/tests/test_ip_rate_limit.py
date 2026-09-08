@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -9,11 +10,19 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.agent.rate_limit import AgentRunRateLimiter
 from app.api.deps import get_run_rate_limit_identity, get_scope
+from app.auth.provider import BuiltinIdentityProvider
 from app.persistence.errors import DomainError
 from app.persistence.models import AgentQuestion
 from app.persistence.scope import LOCAL_SCOPE
+from app.settings import Settings
 from tests.test_lifecycle import post, start, wait_run
 from tests.test_runtime import FakeAgentModel, RejectingAgentRunRateLimiter
+
+TEST_APP = SimpleNamespace(
+    state=SimpleNamespace(
+        settings=Settings(_env_file=None), identity_provider=BuiltinIdentityProvider()
+    )
+)
 
 
 def identity(host, headers=()):
@@ -21,6 +30,7 @@ def identity(host, headers=()):
         Request(
             {
                 "type": "http",
+                "app": TEST_APP,
                 "client": (host, 1234) if host else None,
                 "headers": headers,
             }
@@ -33,7 +43,7 @@ def test_ip_identity_normalizes_addresses_and_ignores_untrusted_headers():
     assert identity("::ffff:192.0.2.1") == identity("192.0.2.1")
     assert identity("192.0.2.1", [(b"x-forwarded-for", b"192.0.2.2")]) == identity("192.0.2.1")
     assert identity(None) == identity("invalid")
-    assert get_scope() is LOCAL_SCOPE
+    assert get_scope(Request({"type": "http", "app": TEST_APP})) is LOCAL_SCOPE
 
 
 @pytest.mark.parametrize(
@@ -48,6 +58,7 @@ def test_ip_identity_uses_asgi_server_proxy_trust(trusted, expected):
         app(
             {
                 "type": "http",
+                "app": TEST_APP,
                 "client": ("127.0.0.1", 1234),
                 "headers": [(b"x-forwarded-for", b"192.0.2.1")],
             },

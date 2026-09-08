@@ -1,0 +1,89 @@
+.auth-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg, #fafafa);
+  color: var(--text, #171717);
+}
+.auth-card {
+  width: min(100%, 360px);
+  display: grid;
+  gap: 16px;
+}
+.auth-card h1,
+.auth-card h2 {
+  margin: 0;
+}
+.auth-card h1 {
+  font-size: 24px;
+}
+.auth-card h2 {
+  font-size: 18px;
+  font-weight: 500;
+}
+.auth-card form,
+.auth-card label {
+  display: grid;
+  gap: 8px;
+}
+.auth-card form {
+  gap: 16px;
+}
+.auth-card input:not([type='checkbox']) {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #9998;
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+}
+.auth-card button,
+.auth-account button {
+  border: 1px solid #9996;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.auth-card button:disabled,
+.auth-account button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.auth-card .auth-primary {
+  background: #171717;
+  color: #fff;
+}
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+}
+.auth-tabs [aria-pressed='true'] {
+  border-color: currentColor;
+}
+.auth-card .auth-checkbox {
+  display: flex;
+  align-items: center;
+}
+.auth-help,
+.auth-card small {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.auth-account {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+}
+.auth-account [role='status'] {
+  flex-basis: 100%;
+  text-align: right;
+}

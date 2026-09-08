@@ -1,5 +1,6 @@
 from alembic import context
 
+import app.auth.models  # noqa: F401
 from app.database import Database
 from app.persistence.models import Base
 from app.settings import Settings

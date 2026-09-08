@@ -26,6 +26,9 @@ from app.agent.tools.mock_search import build_mock_web_search_tool
 from app.agent.tools.web import build_web_tools
 from app.api.routes.agent import router as agent_router
 from app.api.routes.files import router as file_router
+from app.auth.email import EmailSender, SmtpEmailSender
+from app.auth.provider import BuiltinIdentityProvider, IdentityProvider
+from app.auth.routes import router as auth_router
 from app.database import Database
 from app.object_store import BlobStore, build_blob_store
 from app.pdf_reader import PdfReader
@@ -65,9 +68,19 @@ def create_app(
     model_client: AgentModelClient | None = None,
     child_model_client: AgentModelClient | None = None,
     additional_tools: tuple[ToolDefinition, ...] = (),
+    identity_provider: IdentityProvider | None = None,
+    email_sender: EmailSender | None = None,
     event_stream: AgentEventStream | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
+    if (
+        settings.users_enabled
+        and settings.auth_mode == "account"
+        and identity_provider is None
+        and email_sender is None
+        and (not settings.auth_smtp_host or not settings.auth_smtp_from)
+    ):
+        raise ValueError("Account mode requires SMTP host/from or an injected EmailSender")
     database = Database(settings)
     store = build_blob_store(settings)
     extraction_admission = asyncio.Semaphore(settings.file_extraction_max_concurrency)
@@ -163,6 +176,8 @@ def create_app(
     app = FastAPI(title="CornAgent", version="0.1.0", lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
     app.state.settings = settings
+    app.state.identity_provider = identity_provider or BuiltinIdentityProvider()
+    app.state.auth_email_sender = email_sender or SmtpEmailSender(settings)
     app.state.database = database
     app.state.file_store = store
     app.state.file_body_admission = asyncio.Semaphore(settings.file_body_max_concurrency)
@@ -202,11 +217,25 @@ def create_app(
 
     @app.middleware("http")
     async def same_origin_mutations(request: Request, call_next):
-        # This is a local single-user service, with no browser login or cookies.
-        # Prevent unrelated websites from submitting requests to the local API.
+        # Cookie authentication and local access both require same-origin mutations.
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
-            if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
+            expected = (
+                settings.auth_origin
+                if settings.users_enabled
+                else str(request.base_url).rstrip("/")
+            )
+            if (
+                (origin and origin.rstrip("/") != expected)
+                or (
+                    settings.users_enabled and request.headers.get("sec-fetch-site") == "cross-site"
+                )
+                or (
+                    settings.users_enabled
+                    and not origin
+                    and request.headers.get("x-cornagent-request") != "1"
+                )
+            ):
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -216,8 +245,13 @@ def create_app(
                         }
                     },
                 )
-        return await call_next(request)
+        response = await call_next(request)
+        if settings.users_enabled and request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Vary"] = "Cookie"
+        return response
 
+    app.include_router(auth_router, prefix="/api/v1")
     app.include_router(agent_router, prefix="/api/v1")
     app.include_router(file_router, prefix="/api/v1")
 

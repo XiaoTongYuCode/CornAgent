@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +17,40 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+    users_enabled: bool = False
+    auth_mode: Literal["invisible", "account"] = "invisible"
+    auth_secret: SecretStr | None = None
+    auth_origin: str = "http://localhost:5173"
+    auth_cookie_secure: bool = True
+    auth_session_seconds: int = Field(default=604800, ge=300, le=2592000)
+    auth_smtp_host: str = ""
+    auth_smtp_port: int = Field(default=587, ge=1, le=65535)
+    auth_smtp_from: str = ""
+    auth_smtp_username: str = ""
+    auth_smtp_password: SecretStr | None = None
+
+    @model_validator(mode="after")
+    def validate_auth(self):
+        if not self.users_enabled:
+            return self
+        if self.auth_secret is None or len(self.auth_secret.get_secret_value()) < 32:
+            raise ValueError(
+                "Enabled users require CORNAGENT_AUTH_SECRET of at least 32 characters"
+            )
+        from urllib.parse import urlsplit
+
+        origin = urlsplit(self.auth_origin)
+        if not origin.hostname or origin.path or origin.query or origin.fragment or origin.username:
+            raise ValueError("AUTH_ORIGIN must be an exact origin without a trailing slash")
+        local = origin.hostname in {"localhost", "127.0.0.1"}
+        if origin.scheme != "https" and not (local and origin.scheme == "http"):
+            raise ValueError("Authentication requires HTTPS outside localhost")
+        if not self.auth_cookie_secure and not local:
+            raise ValueError("Authentication cookies must be secure outside localhost")
+        if self.auth_smtp_username and self.auth_smtp_password is None:
+            raise ValueError("SMTP username requires a password")
+        return self
+
     environment: str = "local"
     server_host: str = "127.0.0.1"
     server_port: int = Field(default=8000, ge=1, le=65535)

@@ -1,7 +1,4 @@
-"""Shared storage scope for the standalone workspace.
-
-The runtime, checkpoints and tools use the same fixed identity for every browser.
-"""
+"""Runtime ownership contract; LOCAL_SCOPE is used only with users disabled."""
 
 from dataclasses import dataclass
 

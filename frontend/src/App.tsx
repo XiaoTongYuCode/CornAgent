@@ -1,3 +1,5 @@
+import { AuthGate } from './app/AuthGate'
+import type { ReactNode } from 'react'
 import { List } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AgentChatPage } from './agent/AgentChatPage'
@@ -19,7 +21,7 @@ function initialCollapsed() {
     return false
   }
 }
-function Application({ path, sessionId }: { path: string; sessionId: string | null }) {
+function Application({ path, sessionId, accountControls }: { path: string; sessionId: string | null; accountControls?: ReactNode }) {
   const { t } = useI18n()
   const mobile = useMobileLayout()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialCollapsed)
@@ -112,6 +114,7 @@ function Application({ path, sessionId }: { path: string; sessionId: string | nu
         }}
       />
       <main className={`cornagent-main${renderingPreview ? ' cornagent-main--rendering' : ''}`} inert={mobile && mobileOpen}>
+        {accountControls}
         {renderingPreview ? (
           <>
             <header className="topbar"><strong>{t('agentRendering')}</strong></header>
@@ -137,8 +140,8 @@ export default function App() {
   const match = path.match(/^\/chat\/([^/]+)$/)
   const sessionId = match ? decodeURIComponent(match[1]) : null
   return (
-    <CornAgentProvider sessionId={path === '/sidebar' || path === '/rendering' ? undefined : sessionId}>
-      <Application path={path} sessionId={sessionId} />
-    </CornAgentProvider>
+    <AuthGate>{(principal, controls) => <CornAgentProvider key={principal} principalKey={principal} sessionId={path === '/sidebar' || path === '/rendering' ? undefined : sessionId}>
+      <Application path={path} sessionId={sessionId} accountControls={controls} />
+    </CornAgentProvider>}</AuthGate>
   )
 }

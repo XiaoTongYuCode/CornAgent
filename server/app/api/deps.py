@@ -14,8 +14,8 @@ def get_db(request: Request) -> Iterator[Session]:
         yield db
 
 
-def get_scope() -> Identity:
-    return LOCAL_SCOPE
+def get_scope(request: Request) -> Identity:
+    return request.app.state.identity_provider.authenticate(request)
 
 
 def get_run_rate_limit_identity(request: Request) -> Identity:
@@ -24,6 +24,8 @@ def get_run_rate_limit_identity(request: Request) -> Identity:
     Trusted proxy processing belongs to the ASGI server. Reading forwarded headers
     here would let direct clients choose their own rate-limit bucket.
     """
+    if request.app.state.settings.users_enabled:
+        return get_scope(request)
     try:
         address = ip_address(request.client.host if request.client else "")
         if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
@@ -40,8 +42,8 @@ class StreamAuthentication:
     identity: Identity = LOCAL_SCOPE
 
 
-def get_stream_scope() -> StreamAuthentication:
-    return StreamAuthentication()
+def get_stream_scope(request: Request) -> StreamAuthentication:
+    return StreamAuthentication(identity=get_scope(request))
 
 
 Db = Annotated[Session, Depends(get_db)]

@@ -4,6 +4,7 @@ import { CornAgentApiError, type ApiErrorBody, type CornAgentApiTransport, type 
 async function responseError(response: Response) {
   let payload: ApiErrorBody | null = null
   try { payload = await response.json() as ApiErrorBody } catch { /* Non-JSON proxy error. */ }
+  if (response.status === 401) window.dispatchEvent(new Event('cornagent-auth-expired'))
   return new CornAgentApiError(response.status, payload?.error?.code ?? `http_${response.status}`,
     payload?.error?.message ?? `Request failed with ${response.status}.`, payload?.error?.details)
 }
@@ -23,9 +24,10 @@ export class HttpAgentTransport implements CornAgentApiTransport {
 
   private async request<T>(path: string, init: RequestInit, preserveEnvelope = false): Promise<T> {
     const headers = new Headers(init.headers)
+    headers.set('X-CornAgent-Request', '1')
     if (!headers.has('Accept')) headers.set('Accept', 'application/json')
     if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
-    const response = await fetch(`${this.apiBaseUrl}${path}`, { ...init, headers, credentials: 'omit' })
+    const response = await fetch(`${this.apiBaseUrl}${path}`, { ...init, headers, credentials: 'same-origin' })
     if (!response.ok) throw await responseError(response)
     if (response.status === 204) return undefined as T
     const payload = await response.json()
@@ -56,7 +58,7 @@ export class HttpAgentTransport implements CornAgentApiTransport {
   async openEventStream({ path, lastEventId, signal }: EventStreamOptions) {
     const headers = new Headers({ Accept: 'text/event-stream' })
     if (lastEventId !== undefined) headers.set('Last-Event-ID', lastEventId)
-    const response = await fetch(`${this.apiBaseUrl}${path}`, { headers, signal, credentials: 'omit' })
+    const response = await fetch(`${this.apiBaseUrl}${path}`, { headers, signal, credentials: 'same-origin' })
     if (!response.ok) throw await responseError(response)
     return response
   }

@@ -10,6 +10,7 @@ from alembic.config import Config
 from sqlalchemy import MetaData, create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
+from app.auth.models import LoginSession, User
 from app.database import Database
 from app.persistence.agent_runtime import AgentRepository
 from app.persistence.models import AgentRun, AgentSubagentTask
@@ -113,10 +114,29 @@ def test_subagent_schema_fresh_install_and_upgrade(settings, tmp_path, monkeypat
         database = Database(connection_settings)
         inspector = inspect(database.engine)
         assert "cornagent_subagent_tasks" in inspector.get_table_names()
+        assert {
+            "cornagent_auth_users",
+            "cornagent_auth_sessions",
+            "cornagent_auth_challenges",
+            "cornagent_auth_passkeys",
+            "cornagent_auth_rate_buckets",
+        } <= set(inspector.get_table_names())
         assert {"checkpoint_revision", "subagent_completion_seq", "cancel_epoch"} <= {
             item["name"] for item in inspector.get_columns("cornagent_agent_runs")
         }
         with database.session_factory() as db:
+            user = User(email="migration@example.com")
+            db.add(user)
+            db.flush()
+            db.add(
+                LoginSession(
+                    token_hash="a" * 64,
+                    user_id=user.id,
+                    expires_at=2000000000,
+                    authenticated_at=1000000000,
+                )
+            )
+            db.commit()
             if before:
                 row = db.get(AgentRun, before["run"])
                 assert row.status == "completed" and row.draft_markdown == "Existing assistant"
