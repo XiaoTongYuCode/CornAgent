@@ -14,6 +14,7 @@ make dev
 全部配置见项目根目录 [.env.example](../.env.example)，实际读取根目录 `.env`；系统环境变量可以覆盖文件值。`make dev` 使用配置中的监听地址、端口、日志级别和 reload 开关。项目入口与使用说明见 [根 README](../README.md)，存储设计见 [storage.md](../docs/storage.md)。
 
 Vercel 应用连接自建 PostgreSQL / Redis 的 TLS 配置与切换步骤见 [ECS 数据库部署](../docs/ecs-databases.md)。
+前后端与数据库全部运行在 ECS 的步骤见 [ECS 整站部署](../docs/ecs-app.md)。
 
 ```sh
 make lint

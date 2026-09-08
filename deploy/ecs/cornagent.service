@@ -1,0 +1,24 @@
+[Unit]
+Description=CornAgent web and durable agent runtime
+After=network-online.target postgresql-17.service cornagent-redis.service
+Wants=network-online.target postgresql-17.service cornagent-redis.service
+
+[Service]
+User=cornagent
+Group=cornagent
+WorkingDirectory=/opt/cornagent/current/server
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=LITELLM_LOCAL_MODEL_COST_MAP=true
+ExecStart=/opt/cornagent/current/server/.venv/bin/python -m uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cornagent
+
+[Install]
+WantedBy=multi-user.target
