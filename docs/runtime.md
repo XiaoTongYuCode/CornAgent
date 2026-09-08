@@ -62,6 +62,9 @@ IP 来自 ASGI `request.client`，应用不自行信任 `X-Forwarded-For`、`X-R
 
 运行器支持 provider retry、DeepSeek 503 fallback、上下文压缩、3 MiB checkpoint 限制、stream batching、并发控制与指标。
 系统提示词独立在 `app/agent/prompt.py`，模型与所有预算由 `Settings` 配置。
+默认直接处理问候、问答与简单任务；必要时才检索、澄清或拆分独立只读工作，
+子任务指令由主 Agent 编写。每轮编排提醒和工具说明遵循同一按需原则，
+不要求用户填写工具参数。修改提示词后需重启服务；历史回复不会被改写。
 
 ## Root / Child 持久化边界
 

@@ -58,14 +58,14 @@ def build_subagent_orchestration_tools() -> list[ToolDefinition]:
         ToolDefinition(
             name=SPAWN_SUBAGENTS_TOOL_NAME,
             description=(
-                "通常把 1 至 4 个可独立交付、需要多轮取证和小结的"
+                "仅在用户任务适合拆分时，把 1 至 4 个可独立交付、需要多轮取证和小结的"
                 "研究工作流并行下派给只读子 Agent，"
                 "并立即返回持久化 group_id 和 task_ids。同一研究"
                 "对象的不同证据域也可以拆成不同工作流；"
-                "不要把多个一次性搜索 query 机械拆成 Child。完成 "
-                "Root-only 共享前置后优先调用本工具，"
+                "一次性搜索由主 Agent 直接处理。完成 "
+                "Root-only 共享前置后按需调用本工具；任务指令由主 Agent 编写，"
                 "再按实际依赖决定何时 wait/collect。"
-                "该编排工具必须在单独一次 tool_calls 中调用，不能与其他工具并行。"
+                "该编排工具独占一次 tool_calls。"
             ),
             parameters={
                 "type": "object",

@@ -1110,11 +1110,13 @@ class AgentRuntime:
     @staticmethod
     def _orchestration_notice(boundary: dict[str, Any]) -> str:
         return (
-            "可以用 spawn_subagents 将独立的只读工作并行下派，继续主任务，再按依赖 collect/wait。"
-            "子任务指令必须自包含；Child 不继承整个主对话。编排工具每轮只能单独调用。"
-            "required 子任务必须完成并收取结果后才能最终作答；失败结果应如实说明。"
-            "Child needs_input 时由主 Agent 决定是否 ask_user。"
-            "mock_web_search 仅返回固定虚构资料；所有使用它的结论必须标注模拟资料。\n"
+            "子任务状态提示：根据用户当前目标按需使用。"
+            "问候、闲聊和简单问题直接回答；独立只读工作值得拆分时再派发。"
+            "任务指令由主 Agent 根据已有上下文自行编写，包含完整背景和预期产物。"
+            "编排工具每轮单独调用。"
+            "required 子任务结束并收取结果后再最终作答；失败结果如实说明。"
+            "Child needs_input 时主 Agent 先用已有上下文解决，必要时调用 ask_user。"
+            "mock_web_search 返回固定虚构资料；引用时明确标注模拟资料。\n"
             f"Subagent inbox: {boundary['available']} 个结果可收取，"
             f"{boundary['pending']} 个任务尚未结束。"
         )
