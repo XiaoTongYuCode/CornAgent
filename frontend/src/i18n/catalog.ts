@@ -31,6 +31,7 @@ export const messages = {
   subagentDelegate: ['已并行下派任务', 'Parallel subtasks dispatched'],
   subagentTaskCount: ['{count} 个子任务', '{count} subtasks'],
   subagentWaitTimeout: ['本次等待已超时，主 Agent 将继续处理。', 'This wait timed out; the parent will continue.'],
+  providerRunFailed: ['模型服务未能完成本次生成，请稍后重试。', 'The model provider could not complete this run.'],
   webSearching: ['正在搜索网页', 'Searching the web'],
   webSearched: ['已搜索网页', 'Web search completed'],
   webRead: ['已读取网页', 'Webpage read'],

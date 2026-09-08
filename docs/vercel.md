@@ -18,8 +18,10 @@
 | `CORNAGENT_AGENT_MOCK_TOOLS_ENABLED` | `false`，正式环境使用真实网络工具 |
 | `CORNAGENT_AGENT_API_KEY` | 本地 `.env` 中的 OpenRouter 密钥 |
 | `CORNAGENT_AGENT_API_BASE` | `https://openrouter.ai/api/v1` |
-| `CORNAGENT_AGENT_MODEL` | `openrouter/` 加 OpenRouter 模型 ID |
+| `CORNAGENT_AGENT_MODEL` | `openrouter/openrouter/free`，由 OpenRouter 免费路由选择支持所需能力的可用模型 |
 | `CORNAGENT_ALLOWED_HOSTS` | JSON 数组，包含自定义域名和项目部署域名 |
+
+免费路由只使用免费模型，具体模型可能随请求变化。不要固定到限时促销的免费模型 ID；2026-09-08 MiniMax M3 免费接口下线后已改用免费路由。供应商免费额度与限流仍然适用。
 
 容器默认关闭附件上传，本地文件路径使用 `/tmp/cornagent/files`。数据库和 Redis 存放持久状态；不要上传本地 `.env`、对话或运行时数据。`.dockerignore` 和 `.vercelignore` 排除这些内容。
 
