@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     frontend_host: str = "127.0.0.1"
     frontend_port: int = Field(default=5173, ge=1, le=65535)
     database_url: str = "postgresql+psycopg://localhost:5432/cornagent"
+    database_ssl_ca_pem: str | None = None
     redis_url: str | None = "redis://127.0.0.1:6379/0"
     file_store_path: Path = Path("server/.data/files")
     file_store_backend: Literal["local", "s3"] = "local"
