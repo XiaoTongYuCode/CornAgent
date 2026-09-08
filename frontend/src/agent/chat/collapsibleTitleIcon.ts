@@ -1,5 +1,9 @@
 import {
   Brain,
+  FileText,
+  Globe,
+  MessageCircleQuestion,
+  ShieldCheck,
   Component,
   RotateCwSquare,
   CircleAlert,
@@ -16,6 +20,29 @@ import {
   UserSearch,
   type LucideIcon,
 } from 'lucide-react'
+
+import type { AgentChatMessageContentPart } from './types'
+
+const TOOL_ICONS: Readonly<Record<string, LucideIcon>> = {
+  ask_user: MessageCircleQuestion,
+  read_file: FileText,
+  web_search: Search,
+  read_url: Globe,
+  mock_web_search: Search,
+  spawn_subagents: Component,
+  list_subagents: Component,
+  collect_subagent_results: ClipboardCheck,
+  wait_subagents: RotateCwSquare,
+  cancel_subagents: ShieldX,
+}
+
+export function getToolCallIcon(part: AgentChatMessageContentPart): LucideIcon {
+  const metadata = part.metadata
+  if (metadata?.failed === true || metadata?.status === 'failed') return CircleAlert
+  if (metadata?.interaction === 'tool_approval') return ShieldCheck
+  const name = metadata?.tool_name
+  return typeof name === 'string' && Object.hasOwn(TOOL_ICONS, name) ? TOOL_ICONS[name] : ToolCase
+}
 
 const COLLAPSIBLE_TITLE_ICON_RULES: Array<{
   icon: LucideIcon

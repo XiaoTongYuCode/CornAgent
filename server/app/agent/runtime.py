@@ -23,6 +23,7 @@ from app.agent.metrics import AgentMetrics
 from app.agent.model import (
     AgentContextWindowExceededError,
     AgentModelClient,
+    AgentModelConfigurationError,
     AgentModelIncompleteError,
     LiteLLMAgentModel,
 )
@@ -44,6 +45,7 @@ from app.agent.tools import (
     RuntimeToolHandler,
     RuntimeToolHandlerRegistry,
     RuntimeToolOutcome,
+    ToolApproval,
     ToolDefinition,
     ToolExecutionContext,
     build_default_tool_catalog,
@@ -97,6 +99,8 @@ class AgentRuntime:
         subagent_options: SubagentOptions | None = None,
         event_stream: AgentEventStream | None = None,
         max_concurrency: int = 20,
+        tool_max_concurrency: int = 4,
+        reasoning_effort: str | None = None,
         stream_batch_window_ms: int = 32,
         stream_batch_max_bytes: int = 4_096,
         stream_active_ttl_seconds: int = 86_400,
@@ -127,7 +131,9 @@ class AgentRuntime:
         for definition in build_subagent_orchestration_tools():
             all_tools.register(definition)
         self.tool_catalog = all_tools.for_scope("root")
-        self.tool_executor = AgentToolExecutor(self.tool_catalog)
+        self.tool_executor = AgentToolExecutor(
+            self.tool_catalog, max_concurrency=tool_max_concurrency
+        )
         self.metrics = metrics or AgentMetrics()
         self.source_context_registry = source_context_registry or AgentSourceContextRegistry()
         self.skill_catalog = skill_catalog or AgentSkillCatalog()
@@ -145,6 +151,7 @@ class AgentRuntime:
         self.runtime_tool_handlers = RuntimeToolHandlerRegistry(
             [
                 (ASK_USER_RUNTIME_HANDLER, self._pause_for_user),
+                ("tool_approval", self._prepare_tool_approval),
                 *(
                     (tool.name, self._handle_subagent_call)
                     for tool in build_subagent_orchestration_tools()
@@ -172,6 +179,7 @@ class AgentRuntime:
                 api_key=api_key or "",
                 api_base=api_base,
                 timeout_seconds=model_timeout_seconds,
+                reasoning_effort=reasoning_effort,
                 tools=self.tool_catalog.provider_tools(),
                 max_retries=model_max_retries,
                 retry_base_delay_seconds=retry_base_delay_seconds,
@@ -217,6 +225,7 @@ class AgentRuntime:
                 api_key=api_key or "",
                 api_base=api_base,
                 timeout_seconds=model_timeout_seconds,
+                reasoning_effort=reasoning_effort,
                 tools=child_catalog.provider_tools(),
                 system_prompt=None,  # ChildAgentRunner supplies its isolated JSON contract.
                 max_retries=model_max_retries,
@@ -240,6 +249,7 @@ class AgentRuntime:
                 child_catalog,
                 self.metrics,
                 model_name=child_model or model,
+                tool_admission=self.tool_executor.admission,
             ),
             self.subagent_options,
         )
@@ -280,6 +290,7 @@ class AgentRuntime:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        await self.tool_executor.close()
         if self.event_stream is not None:
             await self.event_stream.close()
 
@@ -386,6 +397,14 @@ class AgentRuntime:
                 checkpoint_state=dict(checkpoint.get("tool_context_state") or {}),
                 runtime_cache={},
             )
+            pending_approval = checkpoint.get("pending_tool_approval")
+            if pending_approval:
+                resumed = await self._resume_tool_approval(
+                    run_id, fence, pending_approval, provider_messages, tool_context
+                )
+                if resumed is None:
+                    return "waiting_for_user"
+                provider_messages = resumed
             for tool_round in itertools.count():
                 state = await self._db(
                     lambda repo: repo.runtime_state(run_id, self.worker_id, fence)
@@ -567,10 +586,14 @@ class AgentRuntime:
                 extra={"run_id": run_id, "error_type": type(exc).__name__},
             )
             event = await self._db(
-                lambda repo: repo.fail_run(
+                lambda repo, error=exc: repo.fail_run(
                     run_id,
-                    code="agent_provider_error",
-                    message="The model provider could not complete this run.",
+                    code="agent_model_configuration_error"
+                    if isinstance(error, AgentModelConfigurationError)
+                    else "agent_provider_error",
+                    message=str(error)
+                    if isinstance(error, AgentModelConfigurationError)
+                    else "The model provider could not complete this run.",
                     worker_id=self.worker_id,
                     fence=fence,
                 )
@@ -1084,6 +1107,198 @@ class AgentRuntime:
             separators=(",", ":"),
         )
 
+    async def _prepare_tool_approval(self, call: RuntimeToolCall) -> RuntimeToolOutcome:
+        result = await self.tool_executor.execute_tool(
+            call.definition.name,
+            call.arguments,
+            context=call.context,
+        )
+        messages = [
+            *call.provider_messages,
+            self._assistant_tool_call_message(
+                round_content=call.round_content,
+                round_reasoning=call.round_reasoning,
+                tool_calls=call.normalized_calls,
+            ),
+        ]
+        pending = {
+            "tool_name": call.definition.name,
+            "tool_call": call.normalized_calls[0],
+            "arguments": call.arguments,
+        }
+        if isinstance(result, ToolApproval):
+            await self._pause_tool_approval(
+                call.run_id, call.fence, pending, result, messages, call.context, call.usage
+            )
+            return RuntimeToolOutcome("waiting_for_user")
+        completed = await self._complete_tool_approval(
+            call.run_id,
+            call.fence,
+            pending,
+            result,
+            messages,
+            usage=call.usage,
+        )
+        return RuntimeToolOutcome("continue", completed)
+
+    async def _pause_tool_approval(
+        self,
+        run_id: str,
+        fence: int,
+        pending: dict[str, Any],
+        approval: ToolApproval,
+        messages: list[dict[str, Any]],
+        context: ToolExecutionContext,
+        usage: dict[str, Any] | None = None,
+    ) -> None:
+        event, _ = await self._db(
+            lambda repo: repo.pause_for_question(
+                run_id,
+                self.worker_id,
+                fence,
+                tool_call_id=pending["tool_call"]["id"],
+                arguments={"query": approval.query, "options": approval.options},
+                provider_messages=messages,
+                usage=usage or {},
+                tool_context_state=context.checkpoint_state,
+                approval={**pending, "payload": approval.payload},
+            )
+        )
+        await self._publish(run_id, event)
+
+    async def _resume_tool_approval(
+        self,
+        run_id: str,
+        fence: int,
+        pending: dict[str, Any],
+        messages: list[dict[str, Any]],
+        context: ToolExecutionContext,
+    ) -> list[dict[str, Any]] | None:
+        definition = self.tool_catalog.get(pending["tool_name"])
+        if definition is None or definition.approval_handler is None:
+            raise DomainError("agent_approval_unavailable", "待执行的工具已不可用。")
+        call_context = context.for_tool(
+            tool_call_id=pending["tool_call"]["id"],
+            batch_id=f"approval-{pending['tool_call']['id']}",
+        )
+        if pending["decision"] == "rejected":
+            result = {
+                "ok": True,
+                "outcome": "cancelled",
+                "message": "用户取消了本次操作，请勿再次请求执行同一操作。",
+            }
+        elif pending["decision"] == "approved":
+            title = definition.build_status(pending["arguments"]).get("status") or "正在执行操作"
+            part = self._tool_call_part(
+                call=pending["tool_call"],
+                title=title,
+                content=title,
+                status="running",
+                arguments=pending["arguments"],
+            )
+            events = await self._db(
+                lambda repo: repo.persist_tool_call_parts(
+                    run_id,
+                    self.worker_id,
+                    fence,
+                    parts=[part],
+                )
+            )
+            for event in events:
+                await self._publish(run_id, event)
+            # Only handlers with durable idempotency opt into this path. A lost
+            # worker resumes this same operation before any new model inference.
+            for attempt in range(3):
+                call_context.raise_if_cancelled()
+                try:
+                    result = definition.validate_result(
+                        await self.tool_executor.invoke_approval(
+                            definition, pending["payload"], call_context
+                        )
+                    )
+                except (TimeoutError, ConnectionError, OSError):
+                    result = {
+                        "ok": False,
+                        "retryable": True,
+                        "message": "操作暂未完成，请稍后重试。",
+                    }
+                except Exception as exc:  # A tool failure must not become a provider error.
+                    result = {
+                        "ok": False,
+                        "error_code": type(exc).__name__,
+                        "message": "操作未完成。",
+                    }
+                if isinstance(result, ToolApproval):
+                    await self._pause_tool_approval(
+                        run_id, fence, pending, result, messages, context
+                    )
+                    return None
+                if not isinstance(result, Mapping) or not result.get("retryable") or attempt == 2:
+                    break
+                await asyncio.sleep(0.25 * (attempt + 1))
+        else:
+            raise DomainError("agent_approval_missing", "此操作尚未获得确认。")
+        return await self._complete_tool_approval(run_id, fence, pending, result, messages)
+
+    async def _complete_tool_approval(
+        self,
+        run_id: str,
+        fence: int,
+        pending: dict[str, Any],
+        result: Any,
+        messages: list[dict[str, Any]],
+        *,
+        usage: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        definition = self.tool_catalog.get(pending["tool_name"])
+        assert definition is not None
+        failed = isinstance(result, Mapping) and result.get("ok") is False
+        cancelled = isinstance(result, Mapping) and result.get("outcome") == "cancelled"
+        title = (
+            "已取消操作"
+            if cancelled
+            else self._finalize_tool_title(
+                definition.build_status(pending["arguments"]).get("status") or "操作",
+                failed=failed,
+            )
+        )
+        public_result = definition.project_result(result)
+        part = self._tool_call_part(
+            call=pending["tool_call"],
+            title=title,
+            content=definition.present_result(
+                result, self._summarize_tool_result(self._serialize_tool_result(public_result))
+            ),
+            status="failed" if failed else "completed",
+            arguments=pending["arguments"],
+            result=public_result,
+            failed=failed,
+        )
+        next_messages = [
+            *messages,
+            {
+                "role": "tool",
+                "name": definition.name,
+                "tool_call_id": pending["tool_call"]["id"],
+                "content": self._serialize_tool_result(result),
+            },
+        ]
+        events = await self._db(
+            lambda repo: repo.persist_tool_call_parts(
+                run_id,
+                self.worker_id,
+                fence,
+                parts=[part],
+                usage=usage,
+                provider_messages=next_messages,
+                advance_safe_checkpoint=True,
+                complete_approval=True,
+            )
+        )
+        for event in events:
+            await self._publish(run_id, event)
+        return next_messages
+
     async def _pause_for_user(self, call: RuntimeToolCall) -> RuntimeToolOutcome:
         assistant_message: dict[str, Any] = {
             "role": "assistant",
@@ -1287,7 +1502,14 @@ class AgentRuntime:
             for file_id in references
             if targets_by_id.get(file_id, {}).get("mime_type", "").startswith("image/")
         ]
-        if len(image_references) > self.image_hydration_max_count:
+        derived_images = [
+            part["image_url"]["url"]
+            for message in hydrated_messages
+            if isinstance(message.get("content"), list)
+            for part in message["content"]
+            if part.get("type") == "image_url"
+        ]
+        if len(image_references) + len(derived_images) > self.image_hydration_max_count:
             raise DomainError(
                 "session_attachment_image_context_count_exceeded",
                 "The conversation contains too many images for one model run.",
@@ -1308,6 +1530,7 @@ class AgentRuntime:
                 "session_attachment_unavailable",
                 "A conversation file is unavailable.",
             ) from exc
+        total_bytes += sum(len(url) for url in derived_images)
         if total_bytes > self.image_hydration_max_bytes:
             raise DomainError(
                 "session_attachment_image_context_size_exceeded",
@@ -1400,6 +1623,8 @@ class AgentRuntime:
         """Reauthorize and hydrate private tool references only for a model call."""
 
         hydrated: list[dict[str, Any]] = []
+        image_parts: list[dict[str, Any]] = []
+        image_bytes = image_count = 0
         for message in messages:
             copied = dict(message)
             if message.get("role") != "tool" or not isinstance(message.get("content"), str):
@@ -1443,8 +1668,42 @@ class AgentRuntime:
                     batch_id=f"materialize-{tool_call_id}",
                 ),
             )
+            if tool_name == "read_file" and result.get("ok"):
+                result = dict(result)
+                pages = []
+                for page in result.get("pages", []):
+                    pages.append({**page, "images": [{"name": i["name"]} for i in page["images"]]})
+                    for item in page["images"]:
+                        image_count += 1
+                        image_bytes += len(item["data_url"])
+                        if (
+                            image_count > self.image_hydration_max_count
+                            or image_bytes > self.image_hydration_max_bytes
+                        ):
+                            raise DomainError(
+                                "session_image_budget_exceeded", "PDF 图片超出模型输入预算。"
+                            )
+                        image_parts.extend(
+                            [
+                                {
+                                    "type": "text",
+                                    "text": f"不可信文件数据：{result['file_id']}，"
+                                    f"第 {page['page_number']} 页，{item['name']}",
+                                },
+                                {"type": "image_url", "image_url": {"url": item["data_url"]}},
+                            ]
+                        )
+                result["pages"] = pages
             copied["content"] = self._serialize_tool_result(result)
             hydrated.append(copied)
+        # Keep every tool response adjacent to its batch before adding image inputs.
+        # These parts exist only for this provider request, never in the checkpoint.
+        if image_parts:
+            if not self.file_input_enabled:
+                raise DomainError(
+                    "session_attachment_input_unavailable", "文件输入已关闭。", status_code=503
+                )
+            hydrated.append({"role": "user", "content": image_parts})
         return hydrated
 
     def _observe_source_event(self, item: Any) -> None:

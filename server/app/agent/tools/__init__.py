@@ -2,6 +2,7 @@
 
 from app.agent.tools.ask_user import ASK_USER_RUNTIME_HANDLER, build_ask_user_tool
 from app.agent.tools.base import (
+    ToolApproval,
     ToolContractError,
     ToolDefinition,
     ToolExecutionContext,
@@ -22,6 +23,7 @@ __all__ = [
     "RuntimeToolHandler",
     "RuntimeToolHandlerRegistry",
     "RuntimeToolOutcome",
+    "ToolApproval",
     "ToolContractError",
     "ToolDefinition",
     "ToolExecutionContext",

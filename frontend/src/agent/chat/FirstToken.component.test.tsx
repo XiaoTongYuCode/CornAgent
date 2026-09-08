@@ -62,3 +62,18 @@ it('uses the same status heading for standalone reasoning and direct Markdown st
   expect(heading).toBeEnabled()
   expect(heading).toHaveAttribute('aria-expanded', 'false')
 })
+
+
+it('keeps the running label while waiting for an answer and shows elapsed only at termination', async () => {
+  const view = (active: boolean, streaming: boolean) => <MarkdownMessageContent
+    content="answer" enableProcessSession isProcessActive={active} isMessageStreaming={streaming}
+    processSessionStartedAt={startedAt} processSessionEndedAt="2026-09-05T10:00:02Z"
+  />
+  const { rerender } = render(view(true, true))
+  const heading = screen.getByRole('button', { name: '已处理 2 s' })
+  rerender(view(false, true))
+  expect(screen.getByRole('button', { name: '已处理 2 s' })).toBe(heading)
+  rerender(view(false, false))
+  expect(screen.getByRole('button', { name: '用时 2 s' })).toBe(heading)
+  await waitFor(() => expect(heading).toHaveTextContent('用时'))
+})

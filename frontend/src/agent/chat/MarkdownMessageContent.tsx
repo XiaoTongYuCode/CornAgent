@@ -217,6 +217,7 @@ export const MarkdownMessageContent = memo(function MarkdownMessageContent({
           collapseBoundaryId={collapseBoundaryId}
           endedAt={processSessionEndedAt}
           isStreaming={isProcessActive}
+          isRunActive={isMessageStreaming || isProcessActive}
           isWaitingForFirstToken={isWaitingForFirstToken}
           startedAt={processSessionStartedAt}
         >

@@ -28,6 +28,7 @@ from app.api.routes.agent import router as agent_router
 from app.api.routes.files import router as file_router
 from app.database import Database
 from app.object_store import BlobStore, build_blob_store
+from app.pdf_reader import PdfReader
 from app.persistence.errors import DomainError
 from app.persistence.models import FileResource, utcnow
 from app.settings import Settings
@@ -69,6 +70,8 @@ def create_app(
     settings = settings or Settings()
     database = Database(settings)
     store = build_blob_store(settings)
+    extraction_admission = asyncio.Semaphore(settings.file_extraction_max_concurrency)
+    pdf_reader = PdfReader(settings, store, extraction_admission)
     runtime = AgentRuntime(
         session_factory=database.session_factory,
         redis_url=settings.redis_url,
@@ -96,13 +99,15 @@ def create_app(
         event_stream=event_stream,
         tool_catalog=build_default_tool_catalog(
             [
-                *build_file_tools(database.session_factory),
+                *build_file_tools(database.session_factory, pdf_reader),
                 *build_web_tools(settings),
                 *([build_mock_web_search_tool()] if settings.agent_mock_tools_enabled else []),
                 *additional_tools,
             ]
         ),
         max_concurrency=settings.agent_max_concurrency,
+        tool_max_concurrency=settings.agent_tool_max_concurrency,
+        reasoning_effort=settings.agent_reasoning_effort,
         stream_batch_window_ms=settings.agent_stream_batch_window_ms,
         stream_batch_max_bytes=settings.agent_stream_batch_max_bytes,
         stream_active_ttl_seconds=settings.agent_stream_active_ttl_seconds,
@@ -162,9 +167,7 @@ def create_app(
     app.state.file_store = store
     app.state.file_body_admission = asyncio.Semaphore(settings.file_body_max_concurrency)
     app.state.file_upload_admission = asyncio.Semaphore(settings.file_upload_max_concurrency)
-    app.state.file_extraction_admission = asyncio.Semaphore(
-        settings.file_extraction_max_concurrency
-    )
+    app.state.file_extraction_admission = extraction_admission
     app.state.agent_runtime = runtime
     app.state.agent_run_rate_limiter = rate_limiter
     app.state.agent_stream_connection_limiter = AgentStreamConnectionLimiter(

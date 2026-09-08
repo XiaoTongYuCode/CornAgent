@@ -81,3 +81,23 @@ Root 从安全 checkpoint 回退半个模型轮次时，按任务标识重新合
 模型轮次开始时若有必需任务未终态或未收取，先缓冲该轮正文/思考。模型选择继续使用工具时释放过程输出；模型试图直接结束时丢弃候选回答，先收取已完成结果或注册等待，再重新调用模型。Child 在生成期间刚好完成也不能使未经收取的候选答案直接提交。事务内再次验证所有必需任务已经终态且交付。
 
 接收 Redis 事件时若 epoch 改变或 sequence 不连续，服务端先发送权威 PostgreSQL snapshot，再从快照游标继续。终态事件同样以终态快照收口，避免跨执行器乱序或发布失败遗漏任务投影。快照按稳定部件标识整体替换，历史刷新、SSE 重连和侧边栏使用相同类型与渲染路径。
+
+## 工具并发与审批恢复
+
+`CORNAGENT_AGENT_TOOL_MAX_CONCURRENCY` 默认 4，按进程在 Root、Child 和审批执行间共享。
+它独立于 Run 并发上限；排队期间取消的调用不启动 handler。调用者被取消但底层线程还在运行时，
+名额保留到 handler 真正退出；工具实现仍须设置外部 IO 超时并遵守取消上下文。
+
+带 `approval_handler` 的工具先执行只读准备，返回服务端 `ToolApproval`，再暂停到 `waiting_for_user`。
+Question 与 checkpoint 保存同一计划、原 tool-call ID 和用户决定；私有 payload 不进入公共消息或 SSE。
+用户选项和待执行决定在同一事务提交，恢复时先执行该操作，再请求模型，取消不执行操作。
+计划变化时重新询问，仍使用原 tool-call ID；瞬时错误最多尝试三次。只有保证同一 payload
+可幂等重放的 handler 才能注册审批恢复；普通工具的未知副作用批次仍禁止自动重放。
+
+升级前停止服务，执行 `uv run alembic upgrade head` 应用 `0004_tool_approvals`，再启动前后端。
+该迁移保留普通 ask_user 的调用唯一性，允许同一业务调用因计划变化产生多次审批。
+扩展契约与示例见 [工具审批](tool-approvals.md)。
+
+模型参数不被 LiteLLM 支持时，Run 使用 `agent_model_configuration_error` 明确失败；不当作瞬时故障重试。
+可选 `CORNAGENT_AGENT_REASONING_EFFORT` 同时用于主模型和子模型，留空保持模型默认值。
+DeepSeek 的推理参数通过单次请求白名单透传；其他模型按提供商支持情况验证，不设置全局参数丢弃。

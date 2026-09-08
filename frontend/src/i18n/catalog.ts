@@ -1,6 +1,18 @@
 export type Locale = 'zh-CN' | 'en'
 
 export const messages = {
+  pdfImageBudgetExceeded: ['PDF 图片超出模型输入预算。', 'PDF images exceed the model input budget.'],
+  fileInputDisabled: ['文件输入已关闭。', 'File input is disabled.'],
+  approvalUnavailable: ['此操作已不可用。', 'This operation is no longer available.'],
+  approvalToolUnavailable: ['待执行的工具已不可用。', 'The pending tool is no longer available.'],
+  approvalMissing: ['此操作尚未获得确认。', 'This operation has not been approved.'],
+  approvalChooseOption: ['请选择确认或取消。', 'Choose approve or cancel.'],
+  waitingApproval: ['等待操作确认', 'Awaiting approval'],
+  operationApproved: ['已同意操作', 'Operation approved'],
+  operationCancelled: ['已取消操作', 'Operation cancelled'],
+  elapsed: ['用时', 'Elapsed'],
+  elapsedDuration: ['用时 {duration}', 'Elapsed {duration}'],
+  modelConfigurationError: ['模型调用参数配置错误，请检查服务端配置后重试。', 'Invalid model parameters. Check the server configuration and retry.'],
   errorNetwork: ['网络连接失败，请检查网络后重试。', 'The network request failed. Check your connection and try again.'],
   errorUnauthorized: ['当前请求无法通过身份验证，请刷新后重试。', 'This request could not be authenticated. Refresh and try again.'],
   errorForbidden: ['当前请求没有操作权限。', 'This request is not allowed.'],

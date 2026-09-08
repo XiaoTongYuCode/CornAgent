@@ -158,7 +158,7 @@ it('keeps a static processed heading for a body-only answer with process timing'
 
   expect(screen.getByText('第一段。')).toBeInTheDocument()
   expect(screen.getByText('第二段。')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /^已处理/u })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^用时/u })).toBeDisabled()
 })
 
 it('keeps a completed process expanded when no renderable answer follows it', async () => {
@@ -170,7 +170,7 @@ it('keeps a completed process expanded when no renderable answer follows it', as
     runActive={false}
     workspace={assistantWorkspace()}
   />)
-  const toggle = screen.getByRole('button', { name: /^已处理/u })
+  const toggle = screen.getByRole('button', { name: /^用时/u })
   expect(toggle).toHaveAttribute('aria-expanded', 'true')
   expect(toggle).toBeDisabled()
   expect(screen.getByRole('button', { name: '读取附件' })).toBeInTheDocument()
@@ -187,7 +187,7 @@ it('allows process collapse only while a rendered answer is present', () => {
     message={assistantMessage(parts)} runActive={false} workspace={workspace}
   />
   const { rerender } = render(renderRow(process))
-  const toggle = screen.getByRole('button', { name: /^已处理/u })
+  const toggle = screen.getByRole('button', { name: /^用时/u })
   expect(toggle).toBeDisabled()
   rerender(renderRow([...process, { id: 'body-1', kind: 'markdown', content: '附件摘要。' }]))
   expect(toggle).toBeEnabled()
@@ -213,7 +213,7 @@ it('keeps only the latest body visible and collapses again at a new body boundar
     />,
   )
 
-  const processedToggle = screen.getByRole('button', { name: /^已处理/u })
+  const processedToggle = screen.getByRole('button', { name: /^用时/u })
   expect(processedToggle).toHaveAttribute('aria-expanded', 'false')
   expect(screen.getByText('公司已创建。')).toBeInTheDocument()
   expect(screen.queryByText('先搜索现有公司。')).not.toBeInTheDocument()

@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     agent_model_timeout_seconds: float = Field(default=120, gt=0, le=600)
     agent_reconcile_seconds: float = Field(default=5, gt=0, le=60)
     agent_stream_max_events: int = Field(default=1_000, ge=100, le=10_000)
+    agent_tool_max_concurrency: int = Field(default=4, ge=1, le=32)
+    agent_reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] | None = (
+        None
+    )
     agent_max_concurrency: int = Field(default=20, ge=1, le=500)
     agent_subagents_enabled: bool = True
     tavily_api_key: SecretStr | None = Field(default=None, validation_alias="tavily_api_key")

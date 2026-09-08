@@ -119,8 +119,9 @@ def test_existing_source_history_migration_roundtrip(client_factory, settings, m
     config.set_main_option(
         "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
     )
+    # This fixture uses current ORM schema; exercise only the source-data revision.
     command.stamp(config, "0002_subagents")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0003_source_history")
     database = Database(settings)
     try:
         with database.session_factory() as db:
@@ -136,7 +137,7 @@ def test_existing_source_history_migration_roundtrip(client_factory, settings, m
         command.downgrade(config, "0002_subagents")
         with database.session_factory() as db:
             assert db.get(AgentMessage, created["run"]["user_message_id"]).provider_messages == []
-        command.upgrade(config, "head")
+        command.upgrade(config, "0003_source_history")
     finally:
         database.close()
     model = FinalAgentModel()

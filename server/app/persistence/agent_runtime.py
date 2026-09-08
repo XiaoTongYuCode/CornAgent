@@ -114,7 +114,7 @@ def has_inflight_ordinary_tool_batch(checkpoint: dict[str, Any]) -> bool:
 
 
 def answered_question_count(db: Session, run_id: str) -> int:
-    """Count the questions this Run has actually had answered.
+    """Count answered ordinary ask_user questions, excluding tool approvals.
 
     A tool that must not write before a human agreed cannot take the model's
     word for it: the model chooses whether to call `ask_user` at all. The
@@ -128,7 +128,11 @@ def answered_question_count(db: Session, run_id: str) -> int:
         db.scalar(
             select(func.count())
             .select_from(AgentQuestion)
-            .where(AgentQuestion.run_id == run_id, AgentQuestion.status == "answered")
+            .where(
+                AgentQuestion.run_id == run_id,
+                AgentQuestion.status == "answered",
+                AgentQuestion.tool_name == ASK_USER_TOOL_NAME,
+            )
         )
         or 0
     )
@@ -1276,6 +1280,7 @@ class AgentRepository:
         provider_messages: list[dict[str, Any]],
         usage: dict[str, Any],
         tool_context_state: dict[str, Any] | None = None,
+        approval: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], str]:
         query, options = normalize_ask_user_arguments(arguments)
         run = self._locked_leased_run(run_id, worker_id, fence)
@@ -1287,6 +1292,7 @@ class AgentRepository:
             query=query,
             options=options,
             status="pending",
+            interaction="tool_approval" if approval else "question",
         )
         checkpoint = dict(run.checkpoint)
         checkpoint.update(
@@ -1303,6 +1309,11 @@ class AgentRepository:
                 "tool_context_state": dict(tool_context_state or {}),
             }
         )
+        resume_payload = {"provider_messages": provider_messages}
+        if approval is not None:
+            pending = {**approval, "question_id": question_id, "decision": None}
+            checkpoint["pending_tool_approval"] = pending
+            resume_payload["tool_approval"] = pending
         ensure_checkpoint_size(checkpoint)
         question = AgentQuestion(
             id=question_id,
@@ -1311,12 +1322,12 @@ class AgentRepository:
             session_id=run.session_id,
             run_id=run.id,
             tool_call_id=tool_call_id,
-            tool_name=ASK_USER_TOOL_NAME,
+            tool_name=approval["tool_name"] if approval else ASK_USER_TOOL_NAME,
             query=query,
             options=options,
             status="pending",
             tool_result={},
-            resume_payload={"provider_messages": provider_messages},
+            resume_payload=resume_payload,
         )
         self.db.add(question)
         run.content_parts = checkpoint["content_parts"]
@@ -1373,6 +1384,7 @@ class AgentRepository:
         usage: dict[str, Any] | None = None,
         provider_messages: list[dict[str, Any]] | None = None,
         advance_safe_checkpoint: bool = False,
+        complete_approval: bool = False,
     ) -> list[dict[str, Any]]:
         """Persist full tool-call part upserts before publishing their SSE events."""
 
@@ -1384,6 +1396,8 @@ class AgentRepository:
         if usage:
             run.provider_usage = _merge_usage(run.provider_usage, usage)
         checkpoint = dict(run.checkpoint)
+        if complete_approval:
+            checkpoint.pop("pending_tool_approval", None)
         checkpoint["content_parts"] = run.content_parts
         if provider_messages is not None:
             checkpoint["provider_messages"] = provider_messages
@@ -1597,6 +1611,11 @@ class AgentRepository:
                 "The Agent Run cannot accept this response.",
                 status_code=409,
             )
+        approval = question.resume_payload.get("tool_approval")
+        if approval and payload.action != "cancel" and payload.option_id is None:
+            raise DomainError(
+                "invalid_agent_question_option", "请选择确认或取消。", status_code=422
+            )
         now = _now()
         if payload.action == "cancel":
             question.status = "cancelled"
@@ -1635,14 +1654,25 @@ class AgentRepository:
         question.response_request_hash = request_hash
         question.answered_at = now
         question.updated_at = now
-        tool_message = {
-            "role": "tool",
-            "name": ASK_USER_TOOL_NAME,
-            "tool_call_id": question.tool_call_id,
-            "content": json.dumps(tool_result, ensure_ascii=False, separators=(",", ":")),
-        }
         checkpoint = dict(run.checkpoint)
-        provider_messages = [*checkpoint.get("provider_messages", []), tool_message]
+        provider_messages = list(checkpoint.get("provider_messages", []))
+        if approval:
+            pending = checkpoint.get("pending_tool_approval")
+            if not pending or pending["question_id"] != question.id:
+                raise DomainError("agent_approval_unavailable", "此操作已不可用。", status_code=409)
+            checkpoint["pending_tool_approval"] = {
+                **pending,
+                "decision": "approved" if selected_option_id == "option-1" else "rejected",
+            }
+        else:
+            provider_messages.append(
+                {
+                    "role": "tool",
+                    "name": ASK_USER_TOOL_NAME,
+                    "tool_call_id": question.tool_call_id,
+                    "content": json.dumps(tool_result, ensure_ascii=False, separators=(",", ":")),
+                }
+            )
         checkpoint["provider_messages"] = provider_messages
         checkpoint["safe_provider_messages"] = provider_messages
         run.stream_epoch += 1
@@ -2422,9 +2452,11 @@ class AgentRepository:
         selected_option_id: str | None = None,
         answer_content: str | None = None,
         answered_at: datetime | None = None,
+        interaction: str = "question",
     ) -> dict[str, Any]:
         metadata: dict[str, Any] = {
             "question_id": question_id,
+            "interaction": interaction,
             "run_id": run.id,
             "tool_call_id": tool_call_id,
             "status": status,
@@ -2439,7 +2471,7 @@ class AgentRepository:
         return {
             "id": f"user-question-{question_id}",
             "kind": "user_question",
-            "title": "需要你确认",
+            "title": "等待操作确认" if interaction == "tool_approval" else "需要你确认",
             "content": query,
             "metadata": metadata,
         }
@@ -2455,6 +2487,9 @@ class AgentRepository:
             selected_option_id=question.selected_option_id,
             answer_content=question.answer_content,
             answered_at=question.answered_at,
+            interaction="tool_approval"
+            if question.resume_payload.get("tool_approval")
+            else "question",
         )
 
     @staticmethod

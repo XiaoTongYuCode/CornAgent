@@ -44,3 +44,21 @@ it('keeps the answer draft and translates a failed request when switching langua
   expect(respond).toHaveBeenCalledTimes(1)
   expect(screen.getByRole('button', { name: new RegExp(content) })).toBeVisible()
 })
+
+it('requires an explicit approval click and preserves normal questions', async () => {
+  const user = userEvent.setup()
+  const respond = vi.fn(async () => {})
+  const approval = { ...part, metadata: { ...part.metadata, interaction: 'tool_approval', options: [
+    { id: 'option-1', content: '应用变更', description: '' },
+    { id: 'option-2', content: '取消', description: '' },
+  ] } }
+  const { rerender } = render(<UserQuestionPart display="composer" part={approval} onRespondUserQuestion={respond} />)
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '应用变更' })).not.toHaveAttribute('aria-pressed')
+  await user.keyboard('{Enter}')
+  expect(respond).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: '取消' }))
+  expect(respond).toHaveBeenCalledWith({ questionId: 'q1', action: 'answer', content: '取消', optionId: 'option-2' })
+  rerender(<UserQuestionPart display="composer" part={part} onRespondUserQuestion={respond} />)
+  expect(screen.getByRole('textbox')).toBeVisible()
+})

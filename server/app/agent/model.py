@@ -43,6 +43,13 @@ class AgentContextWindowExceededError(RuntimeError):
         self.provider = provider
 
 
+class AgentModelConfigurationError(RuntimeError):
+    def __init__(self, provider: str, model: str) -> None:
+        super().__init__("模型调用参数配置错误，请检查服务端配置后重试。")
+        self.provider = provider
+        self.model = model
+
+
 class AgentModelIncompleteError(RuntimeError):
     def __init__(self, provider: str, finish_reason: str) -> None:
         super().__init__(f"Agent model response ended with {finish_reason!r}.")
@@ -127,6 +134,7 @@ class LiteLLMAgentModel:
         api_key: str,
         api_base: str | None = None,
         timeout_seconds: float = 120,
+        reasoning_effort: str | None = None,
         tools: Sequence[Mapping[str, Any]] = (),
         system_prompt: str | None = SYSTEM_PROMPT,
         max_retries: int = 2,
@@ -139,7 +147,9 @@ class LiteLLMAgentModel:
         observer: Callable[[str], None] | None = None,
     ) -> None:
         self.primary = _ProviderEndpoint(
-            provider="deepseek" if api_base and "deepseek" in api_base else "primary",
+            provider="deepseek"
+            if model.startswith("deepseek/") or (api_base and "deepseek" in api_base)
+            else "primary",
             model=model,
             api_key=api_key,
             api_base=api_base,
@@ -156,6 +166,7 @@ class LiteLLMAgentModel:
         )
         self.fallback_supports_images = fallback_supports_images
         self.timeout_seconds = timeout_seconds
+        self.reasoning_effort = reasoning_effort
         self.tools = [dict(tool) for tool in tools]
         self.system_prompt = system_prompt
         self.max_retries = max(0, max_retries)
@@ -226,6 +237,8 @@ class LiteLLMAgentModel:
                 return
             except asyncio.CancelledError:
                 raise
+            except litellm.UnsupportedParamsError as exc:
+                raise AgentModelConfigurationError(endpoint.provider, endpoint.model) from exc
             except Exception as exc:  # noqa: BLE001 - provider taxonomy is normalized here
                 if self._is_context_window_error(exc):
                     raise AgentContextWindowExceededError(endpoint.provider) from exc
@@ -308,6 +321,8 @@ class LiteLLMAgentModel:
                 return _text(message.get("content"))
             except asyncio.CancelledError:
                 raise
+            except litellm.UnsupportedParamsError as exc:
+                raise AgentModelConfigurationError(endpoint.provider, endpoint.model) from exc
             except Exception as exc:  # noqa: BLE001
                 if self._is_context_window_error(exc):
                     raise AgentContextWindowExceededError(endpoint.provider) from exc
@@ -359,6 +374,10 @@ class LiteLLMAgentModel:
             "timeout": self.timeout_seconds,
             "num_retries": 0,
         }
+        if self.reasoning_effort is not None:
+            request["reasoning_effort"] = self.reasoning_effort
+            if endpoint.provider == "deepseek":
+                request["allowed_openai_params"] = ["reasoning_effort"]
         if stream:
             request["stream_options"] = {"include_usage": True}
         if tools:
@@ -438,6 +457,7 @@ class LiteLLMAgentModel:
 __all__ = [
     "AgentContextWindowExceededError",
     "AgentModelClient",
+    "AgentModelConfigurationError",
     "AgentModelIncompleteError",
     "extract_reasoning_content",
     "LiteLLMAgentModel",

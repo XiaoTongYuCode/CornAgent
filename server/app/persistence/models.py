@@ -284,17 +284,20 @@ class AgentQuestion(Base):
     __tablename__ = "cornagent_agent_questions"
     __table_args__ = (
         CheckConstraint(
-            "tool_name = 'ask_user'",
+            "length(trim(tool_name)) > 0",
             name="ck_cornagent_agent_questions_tool_name",
         ),
         CheckConstraint(
             "status IN ('pending', 'answered', 'cancelled')",
             name="ck_cornagent_agent_questions_status",
         ),
-        UniqueConstraint(
+        Index(
+            "uq_cornagent_agent_question_tool_call",
             "run_id",
             "tool_call_id",
-            name="uq_cornagent_agent_question_tool_call",
+            unique=True,
+            postgresql_where=text("tool_name = 'ask_user'"),
+            sqlite_where=text("tool_name = 'ask_user'"),
         ),
         Index(
             "uq_cornagent_agent_questions_pending_run",

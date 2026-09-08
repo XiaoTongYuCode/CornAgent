@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
+from app.agent.model import AgentModelConfigurationError
 from app.agent.subagents.protocol import SubagentOptions
 from app.agent.subagents.runner import ChildAgentRunner
 from app.agent.subagents.tools import parse_operation
@@ -269,15 +270,21 @@ class SubagentRuntime:
                 except Exception as exc:
                     result = {
                         "status": "failed",
-                        "summary": "子任务执行失败。",
+                        "summary": str(exc)
+                        if isinstance(exc, AgentModelConfigurationError)
+                        else "子任务执行失败。",
                         "evidence": [],
                         "warnings": [],
                         "usage": {},
                         "error": {
-                            "type": exc.code
+                            "type": "agent_model_configuration_error"
+                            if isinstance(exc, AgentModelConfigurationError)
+                            else exc.code
                             if isinstance(exc, DomainError)
                             else type(exc).__name__,
-                            "message": exc.message
+                            "message": str(exc)
+                            if isinstance(exc, AgentModelConfigurationError)
+                            else exc.message
                             if isinstance(exc, DomainError)
                             else "The child could not complete its task.",
                         },

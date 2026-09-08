@@ -2,15 +2,75 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import asyncio
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from app.agent.tools import AgentToolCatalog, ToolContractError, ToolExecutionContext
+from app.agent.tools import (
+    AgentToolCatalog,
+    ToolContractError,
+    ToolDefinition,
+    ToolExecutionContext,
+)
+
+
+class ToolAdmission:
+    """A process-local budget held until the real handler has finished."""
+
+    def __init__(self, max_concurrency: int = 4) -> None:
+        self._slots = asyncio.Semaphore(max(1, max_concurrency))
+        self._inflight: set[asyncio.Task[Any]] = set()
+
+    async def invoke(
+        self, callback: Callable[[], Awaitable[Any]], context: ToolExecutionContext
+    ) -> Any:
+        await self._slots.acquire()
+        try:
+            context.raise_if_cancelled()
+        except BaseException:
+            self._slots.release()
+            raise
+
+        async def execute():
+            context.raise_if_cancelled()
+            return await callback()
+
+        task = asyncio.create_task(execute())
+        self._inflight.add(task)
+        task.add_done_callback(self._finished)
+        return await asyncio.shield(task)
+
+    def _finished(self, task: asyncio.Task[Any]) -> None:
+        self._inflight.discard(task)
+        self._slots.release()
+        if not task.cancelled():
+            task.exception()  # Retrieve errors even when the original waiter was cancelled.
+
+    async def close(self) -> None:
+        if self._inflight:
+            await asyncio.gather(*self._inflight, return_exceptions=True)
 
 
 class AgentToolExecutor:
-    def __init__(self, catalog: AgentToolCatalog) -> None:
+    def __init__(
+        self,
+        catalog: AgentToolCatalog,
+        *,
+        max_concurrency: int = 4,
+        admission: ToolAdmission | None = None,
+    ) -> None:
         self.catalog = catalog
+        self.admission = admission or ToolAdmission(max_concurrency)
+
+    async def close(self) -> None:
+        await self.admission.close()
+
+    async def invoke_approval(
+        self, tool: ToolDefinition, payload: dict[str, Any], context: ToolExecutionContext
+    ) -> Any:
+        if context.execution_scope != "root" or tool.approval_handler is None:
+            raise ToolContractError("scope", "Approval execution requires a root tool.")
+        return await self.admission.invoke(lambda: tool.approval_handler(payload, context), context)
 
     async def execute_tool(
         self,
@@ -33,6 +93,16 @@ class AgentToolExecutor:
             normalized_arguments = tool.validate_arguments(dict(arguments or {}))
         except ToolContractError as exc:
             return self._error("InvalidToolArguments", str(exc), phase=exc.phase)
+        return await self.admission.invoke(
+            lambda: self._invoke(tool, normalized_arguments, context), context
+        )
+
+    async def _invoke(
+        self,
+        tool: ToolDefinition,
+        normalized_arguments: dict[str, Any],
+        context: ToolExecutionContext,
+    ) -> Any:
         try:
             result = await tool.handler(
                 normalized_arguments,
@@ -55,4 +125,4 @@ class AgentToolExecutor:
         return {"ok": False, "error": error}
 
 
-__all__ = ["AgentToolExecutor"]
+__all__ = ["AgentToolExecutor", "ToolAdmission"]

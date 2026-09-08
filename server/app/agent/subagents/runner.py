@@ -12,7 +12,7 @@ from app.agent.context import AgentContextManager
 from app.agent.metrics import AgentMetrics
 from app.agent.model import AgentModelClient
 from app.agent.subagents.prompt import CHILD_AGENT_SYSTEM_PROMPT, MOCK_EVIDENCE_RULE
-from app.agent.tool_executor import AgentToolExecutor
+from app.agent.tool_executor import AgentToolExecutor, ToolAdmission
 from app.agent.tools import AgentToolCatalog, ToolExecutionContext
 from app.persistence.agent_runtime import _merge_usage, checkpoint_json_size_bytes
 from app.persistence.errors import DomainError
@@ -41,10 +41,11 @@ class ChildAgentRunner:
         metrics: AgentMetrics,
         *,
         model_name: str,
+        tool_admission: ToolAdmission | None = None,
     ):
         self.model = model
         self.catalog = catalog.for_scope("child")
-        self.executor = AgentToolExecutor(self.catalog)
+        self.executor = AgentToolExecutor(self.catalog, admission=tool_admission)
         self.metrics = metrics
         self.model_name = model_name
 

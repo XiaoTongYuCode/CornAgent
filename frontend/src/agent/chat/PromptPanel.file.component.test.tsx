@@ -234,3 +234,13 @@ it('fences a late upload response after the principal or conversation changes', 
   expect(screen.queryByLabelText('待发送文件')).not.toBeInTheDocument()
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:agent-image')
 })
+
+it('keeps the rejection reason when a mixed selection also contains accepted files', async () => {
+  const upload = vi.fn(async (file: File) => fileResult(file))
+  const { container } = render(<Harness upload={upload} remove={vi.fn(async () => {})} onSubmit={vi.fn()} />)
+  const valid = new File(['image'], 'valid.png', { type: 'image/png' })
+  const invalid = new File(['text'], 'invalid.txt', { type: 'text/plain' })
+  fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [valid, invalid] } })
+  await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
+  expect(screen.getByText('不支持 invalid.txt 的文件格式。')).toBeVisible()
+})

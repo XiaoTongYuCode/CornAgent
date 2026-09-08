@@ -6,7 +6,7 @@ import { SubagentTaskPart, SubagentControlPart, SUBAGENT_CONTROL_KEYS } from './
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 
 import { CollapsibleContent } from './CollapsibleContent'
-import { getCollapsibleTitleIcon } from './collapsibleTitleIcon'
+import { getCollapsibleTitleIcon, getToolCallIcon } from './collapsibleTitleIcon'
 import {
   MarkdownRenderer,
   type AgentMarkdownLinkHandlers,
@@ -39,6 +39,7 @@ interface ProcessSessionBlockProps {
   collapseBoundaryId: string | null
   endedAt?: string | null
   isStreaming: boolean
+  isRunActive: boolean
   isWaitingForFirstToken: boolean
   startedAt?: string | null
 }
@@ -75,6 +76,7 @@ export function ProcessSessionBlock({
   collapseBoundaryId,
   endedAt,
   isStreaming,
+  isRunActive,
   isWaitingForFirstToken,
   startedAt,
 }: ProcessSessionBlockProps) {
@@ -98,7 +100,7 @@ export function ProcessSessionBlock({
       open={openState}
       scrollable={false}
       title={<span className="chat-markdown-message-content__process-status">
-        <TextSwap text={t(isWaitingForFirstToken ? 'thinking' : 'processed')} shimmer={isWaitingForFirstToken} durationMs={50} />
+        <TextSwap text={t(isWaitingForFirstToken ? 'thinking' : isRunActive ? 'processed' : 'elapsed')} shimmer={isWaitingForFirstToken} durationMs={50} />
         {!isWaitingForFirstToken && elapsedDuration && <span>{elapsedDuration}</span>}
       </span>}
       titleIcon={null}
@@ -238,7 +240,7 @@ export function MessageRenderPlanContent({
         titleTransition
         titleClassName={isFailedToolCall ? 'chat-markdown-message-content__tool-title--failed' : ''}
         titleStreaming={!isFailedToolCall && isPartActive}
-        titleIcon={getCollapsibleTitleIcon(displayTitle)}
+        titleIcon={getToolCallIcon(part)}
         variant="chat"
       />
     )
@@ -255,9 +257,7 @@ export function MessageRenderPlanContent({
       if (part.metadata?.subagent === true) return Component
       if (part.metadata?.tool_name === 'wait_subagents') return RotateCwSquare
       if (Object.hasOwn(SUBAGENT_CONTROL_KEYS, String(part.metadata?.tool_name))) return Component
-      return getCollapsibleTitleIcon(
-        resolveToolCallDisplayTitle(part, activeToolCallPartId === part.id),
-      )
+      return getToolCallIcon(part)
     }
     return null
   }
@@ -314,7 +314,7 @@ export function MessageRenderPlanContent({
           isProcessActive,
         })
         const groupTitleIcon = streamingGroupTitle
-          ? getCollapsibleTitleIcon(streamingGroupTitle)
+          ? getContentPartTitleIcon(parts[item.indexes[item.indexes.length - 1]])
           : getGroupTitleIcon(item, parts)
         return (
           <ToolRunGroup

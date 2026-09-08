@@ -131,6 +131,7 @@ export function useAgentFileDraft({
 
   const addFiles = useCallback((files: File[]) => {
     if (!capabilities?.enabled || files.length === 0) return
+    setError(null)
     const accepted: AgentDraftFile[] = []
     let totalBytes = filesRef.current.reduce((total, file) => total + file.file.size, 0)
     for (const file of files) {
@@ -172,7 +173,6 @@ export function useAgentFileDraft({
       })
     }
     if (accepted.length === 0) return
-    setError(null)
     replaceFiles((current) => [...current, ...accepted])
     accepted.forEach((item) => { void uploadItem(item) })
   }, [capabilities, replaceFiles, uploadItem])

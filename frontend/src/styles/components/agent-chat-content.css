@@ -78,6 +78,7 @@
 .chat-markdown-message-content__user-question-option-inner { width: 100%; min-width: 0; display: grid; grid-template-columns: 25px minmax(0, 1fr); align-items: center; column-gap: 15px; }
 .chat-markdown-message-content__user-question-option-index { width: 25px; height: 25px; grid-row: 1 / span 2; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: #151821; border-radius: 50%; font-size: 14px; font-weight: 600; }
 .chat-markdown-message-content__user-question-option-content { min-width: 0; color: inherit; font-size: 14px; font-weight: 600; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-markdown-message-content__user-question-option-inner:not(:has(.chat-markdown-message-content__user-question-option-description)) .chat-markdown-message-content__user-question-option-index { grid-row: 1; }
 .chat-markdown-message-content__user-question-option-description { min-width: 0; grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-option-tooltip { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-markdown-message-content__user-question-custom { min-height: 44px; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 8px; padding: 7px 11px; background: var(--surface-muted); border: 1px solid transparent; border-radius: 11px; transition-property: background-color, border-color, opacity; transition-duration: 160ms; }

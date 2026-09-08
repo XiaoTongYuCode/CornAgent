@@ -26,9 +26,26 @@ def extract_pdf(
     max_chars: int,
     timeout_seconds: float,
 ) -> PdfExtraction:
+    result = parse_pdf(
+        payload, max_pages=max_pages, max_chars=max_chars, timeout_seconds=timeout_seconds
+    )
+    return PdfExtraction(**{key: result[key] for key in PdfExtraction.__dataclass_fields__})
+
+
+def parse_pdf(
+    payload: bytes,
+    *,
+    max_pages: int,
+    max_chars: int,
+    timeout_seconds: float,
+    page_numbers: list[int] | None = None,
+) -> dict:
+    command = [sys.executable, "-m", "app.file_parser", str(max_pages), str(max_chars)]
+    if page_numbers is not None:
+        command.append(json.dumps(page_numbers))
     try:
         completed = subprocess.run(
-            [sys.executable, "-m", "app.file_parser", str(max_pages), str(max_chars)],
+            command,
             input=payload,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -60,20 +77,6 @@ def extract_pdf(
         messages = {
             "session_file_pdf_encrypted": "Encrypted PDF files are not supported.",
             "session_file_pdf_pages_exceeded": "The PDF has too many pages.",
-            "session_file_extraction_empty": "The PDF contains no extractable text.",
         }
         raise DomainError(code, messages.get(code, "PDF extraction failed."), status_code=422)
-    try:
-        return PdfExtraction(
-            markdown=str(result["markdown"]),
-            parser=str(result["parser"]),
-            parser_version=str(result["parser_version"]),
-            page_count=int(result["page_count"]),
-            truncated=bool(result["truncated"]),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise DomainError(
-            "session_file_extraction_failed",
-            "PDF extraction failed.",
-            status_code=422,
-        ) from exc
+    return result

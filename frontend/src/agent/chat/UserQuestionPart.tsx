@@ -1,7 +1,7 @@
 import { useI18n } from '../../i18n'
 import { apiErrorMessage } from '../../api/transport'
 import { localizeSystemMessage } from '../../i18n/systemMessages'
-import { CheckCircle2, CornerDownLeft, Pencil, X, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, CornerDownLeft, MessageCircleQuestion, ShieldCheck, Pencil, X, type LucideIcon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, Input, Tooltip, Typography } from 'antd'
 
@@ -62,6 +62,7 @@ export function UserQuestionPart({
   const { t, locale, text } = useI18n()
   const metadata = part.metadata
   const questionId = getMetadataString(metadata, 'question_id')
+  const isApproval = getMetadataString(metadata, 'interaction') === 'tool_approval'
   const status = getUserQuestionStatus(part)
   const answerContent = getMetadataString(metadata, 'answer_content')
   const selectedOptionId = getMetadataString(metadata, 'selected_option_id')
@@ -76,7 +77,7 @@ export function UserQuestionPart({
   const isComposerOpen = display !== 'composer' || open
   const isDisabled = !isComposerOpen || !isPending || !questionId || !onRespondUserQuestion || isSubmitting
   const customAnswer = customContent.trim()
-  const effectiveSelectedOptionId = draftSelectedOptionId ?? options[0]?.id ?? null
+  const effectiveSelectedOptionId = draftSelectedOptionId ?? (isApproval ? null : options[0]?.id) ?? null
   const selectedOption = options.find((option) => option.id === effectiveSelectedOptionId) ?? null
 
   const moveSelectedOption = useCallback((direction: -1 | 1) => {
@@ -172,7 +173,7 @@ export function UserQuestionPart({
   }, [questionId, respond])
 
   useEffect(() => {
-    if (!isPending || display !== 'composer' || !open) {
+    if (isApproval || !isPending || display !== 'composer' || !open) {
       return
     }
 
@@ -223,18 +224,20 @@ export function UserQuestionPart({
     return () => {
       document.removeEventListener('keydown', handleDocumentKeyDown, true)
     }
-  }, [cancelQuestion, display, handleOptionKeyboardNavigation, isDisabled, isPending, open, submitAnswer])
+  }, [cancelQuestion, display, handleOptionKeyboardNavigation, isApproval, isDisabled, isPending, open, submitAnswer])
 
   if (!isPending) {
     const isAnswered = status === 'answered'
-    const resultTitle = isAnswered
+    const resultTitle = isApproval
+      ? t(isAnswered && selectedOptionId === 'option-1' ? 'operationApproved' : 'operationCancelled')
+      : isAnswered
       ? t(selectedOptionId ? 'questionOptionAnswered' : 'questionAnswered', { answer: answerContent || t('answerSubmitted') })
       : t('questionSkipped')
 
     return (
       <UserQuestionTitle
         className="chat-markdown-message-content__tool chat-markdown-message-content__user-question-result"
-        icon={isAnswered ? CheckCircle2 : X}
+        icon={isAnswered && (!isApproval || selectedOptionId === 'option-1') ? CheckCircle2 : X}
         title={resultTitle}
       />
     )
@@ -244,7 +247,8 @@ export function UserQuestionPart({
     return (
       <UserQuestionTitle
         className="chat-markdown-message-content__tool chat-markdown-message-content__user-question-tool"
-        title={t('askingQuestion')}
+        title={t(isApproval ? 'waitingApproval' : 'askingQuestion')}
+        icon={isApproval ? ShieldCheck : MessageCircleQuestion}
       />
     )
   }
@@ -268,7 +272,8 @@ export function UserQuestionPart({
         {options.map((option, index) => (
           <Tooltip key={option.id} trigger={['hover', 'focus']} title={<span className="agent-option-tooltip">{option.content}{option.description && <><br />{option.description}</>}</span>}>
           <Button
-            aria-pressed={option.id === effectiveSelectedOptionId}
+            aria-label={isApproval ? option.content : undefined}
+            aria-pressed={isApproval ? undefined : option.id === effectiveSelectedOptionId}
             block
             className={[
               'chat-markdown-message-content__user-question-option',
@@ -276,6 +281,7 @@ export function UserQuestionPart({
                 'chat-markdown-message-content__user-question-option--selected',
             ].filter(Boolean).join(' ')}
             disabled={isDisabled}
+            loading={isSubmitting && draftSelectedOptionId === option.id}
             onClick={() => {
               submitOption(option)
             }}
@@ -297,7 +303,7 @@ export function UserQuestionPart({
           </Tooltip>
         ))}
       </div>
-      <div className="chat-markdown-message-content__user-question-custom">
+      {!isApproval && <div className="chat-markdown-message-content__user-question-custom">
         <span className="chat-markdown-message-content__user-question-custom-icon">
           <Pencil size={15} />
         </span>
@@ -343,7 +349,7 @@ export function UserQuestionPart({
             <CornerDownLeft size={14} />
           </Button>
         </div>
-      </div>
+      </div>}
       {submitError ? (
         <Typography.Text className="chat-markdown-message-content__user-question-error" role="alert">
           {apiErrorMessage(submitError.reason, submitError.reason instanceof Error

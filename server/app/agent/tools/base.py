@@ -24,6 +24,23 @@ class ToolContractError(ValueError):
         self.phase = phase
 
 
+@dataclass(frozen=True, slots=True)
+class ToolApproval:
+    """Server-generated question and private, resumable execution payload."""
+
+    query: str
+    payload: dict[str, Any]
+    approve_label: str = "确认"
+    cancel_label: str = "取消"
+
+    @property
+    def options(self) -> list[dict[str, str]]:
+        return [
+            {"content": self.approve_label, "description": ""},
+            {"content": self.cancel_label, "description": ""},
+        ]
+
+
 @dataclass(slots=True)
 class ToolExecutionContext:
     """Request-scoped dependencies; durable state belongs in checkpoint_state."""
@@ -85,6 +102,7 @@ class ToolDefinition:
     status_detail: ToolStatusDetail = None
     runtime_handler: str | None = None
     exclusive: bool = False
+    approval_handler: ToolHandler | None = None
     arguments_model: type[BaseModel] | None = None
     result_model: type[BaseModel] | None = None
     result_presenter: ToolResultPresenter | None = None
@@ -94,6 +112,13 @@ class ToolDefinition:
     read_only: bool = False
 
     def __post_init__(self) -> None:
+        if self.approval_handler is not None:
+            if self.runtime_handler not in {None, "tool_approval"} or self.private_result:
+                raise ValueError(
+                    "Approval tools require public results and the tool_approval handler."
+                )
+            object.__setattr__(self, "runtime_handler", "tool_approval")
+            object.__setattr__(self, "exclusive", True)
         if not self.execution_scopes or not self.execution_scopes <= {"root", "child"}:
             raise ValueError("Tool execution_scopes must contain root and/or child.")
         if "child" in self.execution_scopes and (
@@ -137,6 +162,10 @@ class ToolDefinition:
         return value.model_dump(mode="json", exclude_none=True)
 
     def validate_result(self, result: Any) -> Any:
+        if isinstance(result, ToolApproval):
+            if self.approval_handler is None:
+                raise ToolContractError("result", "This tool has no approval handler.")
+            return result
         if self.result_model is None:
             return result
         try:
