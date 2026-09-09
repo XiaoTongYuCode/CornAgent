@@ -143,6 +143,8 @@ export default function App() {
 | `/sidebar` | 在业务页面中打开 Agent 面板的完整示例 |
 | `/rendering` | 用合成内容演示流式文字、工具标题与过程折叠 |
 
+使用统计页位于 `/usage`，支持可选的工具与模型埋点。指标口径和可插拔采集器见[使用统计](docs/usage-analytics.md)。
+
 ## 工具与子任务
 
 内置 `ask_user`、`read_file`、`web_search`、`read_url`，以及五个子任务编排工具。主 Agent 可以继续工作，再按需等待和收取子任务结果；子任务也有独立的持久化状态与取消机制。

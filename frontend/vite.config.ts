@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
@@ -22,7 +23,7 @@ const frontendPort = port('FRONTEND_PORT', '5173')
 
 export default defineConfig({
   envDir: false,
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     host: frontendHost, port: frontendPort, strictPort: true,
     proxy: { '/api': { target: proxyTarget, changeOrigin: false } },

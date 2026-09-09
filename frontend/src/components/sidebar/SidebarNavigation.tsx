@@ -1,4 +1,4 @@
-import { ChevronDown, House, MessagesSquare, PanelRight, Plus, SquarePlay, UserRound } from 'lucide-react'
+import { ChartNoAxesCombined, ChevronDown, House, MessagesSquare, PanelRight, Plus, SquarePlay, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AgentSession } from '../../agent/types'
 import { AgentSessionActionsMenu } from '../../agent/AgentSessionActionsMenu'
@@ -11,6 +11,8 @@ export interface SidebarNavigationProps {
   home: boolean
   example: boolean
   renderingPreview: boolean
+  usage?: boolean
+  onUsage?(): void
   profile?: boolean
   onProfile?(): void
   loadingMore: boolean
@@ -39,6 +41,8 @@ export function SidebarNavigation({
   home,
   example,
   renderingPreview,
+  usage = false,
+  onUsage,
   profile = false,
   onProfile,
   loadingMore,
@@ -93,6 +97,10 @@ export function SidebarNavigation({
         >
           {t('agentRendering')}
         </SidebarNavItem>
+        {onUsage && <SidebarNavItem active={usage} onClick={onUsage}
+          icon={<ChartNoAxesCombined size={16} strokeWidth={1.75} aria-hidden="true" />}>
+          {t('usageTitle')}
+        </SidebarNavItem>}
         {onProfile && (
           <SidebarNavItem active={profile} onClick={onProfile}
             icon={<UserRound size={16} strokeWidth={1.75} aria-hidden="true" />}>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,6 +17,7 @@ from app.agent.tool_executor import AgentToolExecutor, ToolAdmission
 from app.agent.tools import AgentToolCatalog, ToolExecutionContext
 from app.persistence.agent_runtime import _merge_usage, checkpoint_json_size_bytes
 from app.persistence.errors import DomainError
+from app.telemetry import bind
 
 
 class ChildEvidence(BaseModel):
@@ -42,7 +44,9 @@ class ChildAgentRunner:
         *,
         model_name: str,
         tool_admission: ToolAdmission | None = None,
+        telemetry=None,
     ):
+        self.telemetry = telemetry
         self.model = model
         self.catalog = catalog.for_scope("child")
         self.executor = AgentToolExecutor(self.catalog, admission=tool_admission)
@@ -50,6 +54,17 @@ class ChildAgentRunner:
         self.model_name = model_name
 
     async def run(self, task: dict[str, Any], cancel_event: asyncio.Event) -> dict[str, Any]:
+        context = SimpleNamespace(
+            tenant_id=task["tenant_id"],
+            owner_membership_id=task["owner_membership_id"],
+            session_id=task["session_id"],
+            run_id=task["root_run_id"],
+            execution_scope="child",
+        )
+        with bind(self.telemetry, context):
+            return await self._run(task, cancel_event)
+
+    async def _run(self, task: dict[str, Any], cancel_event: asyncio.Event) -> dict[str, Any]:
         if self.model is None:
             raise DomainError("subagent_model_unavailable", "The child model is unavailable.")
         spec = task["spec"]

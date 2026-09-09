@@ -12,6 +12,7 @@ from app.agent.tools import (
     ToolDefinition,
     ToolExecutionContext,
 )
+from app.telemetry import tool_call
 
 
 class ToolAdmission:
@@ -70,9 +71,21 @@ class AgentToolExecutor:
     ) -> Any:
         if context.execution_scope != "root" or tool.approval_handler is None:
             raise ToolContractError("scope", "Approval execution requires a root tool.")
-        return await self.admission.invoke(lambda: tool.approval_handler(payload, context), context)
+        return await tool_call(
+            f"{tool.name}:approval",
+            lambda: self.admission.invoke(lambda: tool.approval_handler(payload, context), context),
+        )
 
     async def execute_tool(
+        self,
+        name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        context: ToolExecutionContext | None = None,
+    ) -> Any:
+        return await tool_call(name, lambda: self._execute_tool(name, arguments, context=context))
+
+    async def _execute_tool(
         self,
         name: str,
         arguments: Mapping[str, Any] | None = None,

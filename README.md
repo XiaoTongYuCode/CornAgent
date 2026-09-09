@@ -143,6 +143,8 @@ The chat page, launcher, and panel share sessions under the same provider. For c
 | `/sidebar` | A complete example of opening the agent panel within an application page |
 | `/rendering` | Synthetic content demonstrating streaming text, tool titles, and process collapsing |
 
+Usage analytics is available at `/usage`, with optional tool/model event collection. See [usage analytics](docs/usage-analytics.md) for metric definitions and the pluggable collector.
+
 ## Tools and Subtasks
 
 Built-in tools include `ask_user`, `read_file`, `web_search`, `read_url`, and five subtask orchestration tools. The main agent can continue working, then wait for and collect subtask results as needed. Subtasks have their own durable state and cancellation mechanism.

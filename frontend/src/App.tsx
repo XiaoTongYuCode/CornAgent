@@ -1,7 +1,6 @@
 import { AuthGate } from './app/AuthGate'
-import type { ReactNode } from 'react'
+import { Activity, lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { List } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
 import { AgentChatPage } from './agent/AgentChatPage'
 import { AgentSidebar } from './agent/AgentSidebar'
 import { CornAgentProvider } from './agent/CornAgentProvider'
@@ -13,6 +12,8 @@ import { SidebarExamplePage } from './app/SidebarExamplePage'
 import { Sidebar } from './components/Sidebar'
 import { useI18n } from './i18n'
 import { ProcessTransitionPreview } from './previews/ProcessTransitionPreview'
+
+const UsagePage = lazy(() => import('./usage/UsagePage'))
 
 const COLLAPSED_KEY = 'cornagent:sidebar-collapsed'
 function initialCollapsed() {
@@ -31,7 +32,8 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
   const example = path === '/sidebar'
   const renderingPreview = path === '/rendering'
   const profile = path === '/profile'
-  const chat = !example && !renderingPreview && !profile
+  const usage = path === '/usage'
+  const chat = !example && !renderingPreview && !profile && !usage
   const workspace = useAgent()
   const collapsed = !mobile && sidebarCollapsed
   const currentRun = workspace.snapshot?.run ?? workspace.session?.activeRun
@@ -92,6 +94,8 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
         example={example}
         renderingPreview={renderingPreview}
         profile={profile}
+        usage={usage}
+        onUsage={() => { setMobileOpen(false); navigate('/usage') }}
         onProfile={accountControls ? () => {
           setMobileOpen(false)
           navigate('/profile')
@@ -121,7 +125,9 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
         }}
       />
       <main className={`cornagent-main${renderingPreview ? ' cornagent-main--rendering' : ''}`} inert={mobile && mobileOpen}>
-        {profile ? (
+        {usage ? (
+          <Suspense fallback={<div className="usage-loading" role="status">{t('loading')}</div>}><UsagePage /></Suspense>
+        ) : profile ? (
           <ProfilePage accountControls={accountControls} />
         ) : renderingPreview ? (
           <>
@@ -130,14 +136,15 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
           </>
         ) : example ? (
           <SidebarExamplePage />
-        ) : (
+        ) : null}
+        <Activity mode={chat ? 'visible' : 'hidden'}>
           <AgentChatPage
             emptyStateFooter={sessionId === null ? <ProjectContactLinks /> : undefined}
-            sessionId={sessionId}
+            sessionId={chat ? sessionId : workspace.session?.id ?? null}
             workspace={workspace}
             onSessionChange={changeSession}
           />
-        )}
+        </Activity>
       </main>
       {example && <AgentSidebar layout="docked" />}
     </div>
@@ -148,7 +155,7 @@ export default function App() {
   const match = path.match(/^\/chat\/([^/]+)$/)
   const sessionId = match ? decodeURIComponent(match[1]) : null
   return (
-    <AuthGate>{(principal, controls) => <CornAgentProvider key={principal} principalKey={principal} sessionId={path === '/sidebar' || path === '/rendering' || path === '/profile' ? undefined : sessionId}>
+    <AuthGate>{(principal, controls) => <CornAgentProvider key={principal} principalKey={principal} sessionId={path === '/sidebar' || path === '/rendering' || path === '/profile' || path === '/usage' ? undefined : sessionId}>
       <Application path={path} sessionId={sessionId} accountControls={controls} />
     </CornAgentProvider>}</AuthGate>
   )

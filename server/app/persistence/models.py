@@ -413,3 +413,27 @@ class FileResource(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UsageEvent(Base):
+    """Allowlisted metric fields only; deleted conversations cascade to metrics."""
+
+    __tablename__ = "cornagent_usage_events"
+    __table_args__ = (
+        Index("ix_usage_owner_created", "tenant_id", "owner_membership_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    owner_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("cornagent_agent_sessions.id", ondelete="CASCADE")
+    )
+    run_id: Mapped[str] = mapped_column(ForeignKey("cornagent_agent_runs.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(200))
+    execution_scope: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20))
+    duration_seconds: Mapped[float] = mapped_column()
+    input_tokens: Mapped[int | None] = mapped_column(BigInteger)
+    output_tokens: Mapped[int | None] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+    telemetry_enabled: bool = True
+    telemetry_retention_days: int = Field(default=90, ge=1, le=365)
     users_enabled: bool = False
     auth_mode: Literal["invisible", "account"] = "invisible"
     auth_secret: SecretStr | None = None

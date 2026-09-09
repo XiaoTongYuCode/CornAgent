@@ -7,3 +7,7 @@ CornAgent
 由 EigenLogic 的 agent_server / agent_web 归档版本移植和改编：
 1c934f0d6ed2970f7a36eac463ab08897f071523。
 具体来源、改编范围和运行边界见 docs/subagents.md。运行时不依赖 EigenLogic。
+
+Bklit UI chart components (frontend/src/vendor/bklit)
+Copyright (c) 2026 uixmat. MIT license; see frontend/src/vendor/bklit/LICENSE.
+https://github.com/bklit/bklit-ui

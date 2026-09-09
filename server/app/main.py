@@ -26,6 +26,7 @@ from app.agent.tools.mock_search import build_mock_web_search_tool
 from app.agent.tools.web import build_web_tools
 from app.api.routes.agent import router as agent_router
 from app.api.routes.files import router as file_router
+from app.api.routes.usage import router as usage_router
 from app.auth.email import EmailSender, SmtpEmailSender
 from app.auth.provider import BuiltinIdentityProvider, IdentityProvider
 from app.auth.routes import router as auth_router
@@ -35,6 +36,7 @@ from app.pdf_reader import PdfReader
 from app.persistence.errors import DomainError
 from app.persistence.models import FileResource, utcnow
 from app.settings import Settings
+from app.telemetry import Collector, DatabaseSink, EventSink
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,7 @@ def create_app(
     identity_provider: IdentityProvider | None = None,
     email_sender: EmailSender | None = None,
     event_stream: AgentEventStream | None = None,
+    telemetry_sink: EventSink | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if (
@@ -82,11 +85,20 @@ def create_app(
     ):
         raise ValueError("Account mode requires SMTP host/from or an injected EmailSender")
     database = Database(settings)
+    telemetry_collector = (
+        Collector(
+            telemetry_sink
+            or DatabaseSink(database.session_factory, settings.telemetry_retention_days)
+        )
+        if settings.telemetry_enabled
+        else None
+    )
     store = build_blob_store(settings)
     extraction_admission = asyncio.Semaphore(settings.file_extraction_max_concurrency)
     pdf_reader = PdfReader(settings, store, extraction_admission)
     runtime = AgentRuntime(
         session_factory=database.session_factory,
+        telemetry=telemetry_collector,
         redis_url=settings.redis_url,
         model=settings.agent_model,
         api_key=settings.agent_api_key.get_secret_value() if settings.agent_api_key else None,
@@ -171,6 +183,8 @@ def create_app(
                     await collector
             await runtime.close()
             await rate_limiter.aclose()
+            if telemetry_collector:
+                await asyncio.to_thread(telemetry_collector.close)
             database.close()
 
     app = FastAPI(title="CornAgent", version="0.1.0", lifespan=lifespan)
@@ -251,14 +265,15 @@ def create_app(
                 response.headers.get("Content-Type", "").split(";", 1)[0] == "text/event-stream"
             )
             # Keep authenticated responses private without allowing SSE compression.
-            response.headers["Cache-Control"] = (
-                "no-store, no-transform" if is_sse else "no-store"
-            )
+            response.headers["Cache-Control"] = "no-store, no-transform" if is_sse else "no-store"
             response.headers["Vary"] = "Cookie"
         return response
 
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(agent_router, prefix="/api/v1")
+    app.state.telemetry = telemetry_collector
+    app.state.telemetry_local = settings.telemetry_enabled and telemetry_sink is None
+    app.include_router(usage_router, prefix="/api/v1")
     app.include_router(file_router, prefix="/api/v1")
 
     @app.get("/healthz")

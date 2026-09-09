@@ -54,6 +54,7 @@ from app.object_store import BlobStore, ObjectStoreError
 from app.persistence.agent_runtime import AgentRepository
 from app.persistence.agent_schemas import AgentStreamSnapshot
 from app.persistence.errors import DomainError
+from app.telemetry import bind, tool_call
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,9 @@ class AgentRuntime:
         source_context_registry: AgentSourceContextRegistry | None = None,
         skill_catalog: AgentSkillCatalog | None = None,
         metrics: AgentMetrics | None = None,
+        telemetry=None,
     ) -> None:
+        self.telemetry = telemetry
         self.session_factory = session_factory
         self.reconcile_seconds = reconcile_seconds
         self.worker_id = f"cornagent-agent-{uuid4()}"
@@ -249,6 +252,7 @@ class AgentRuntime:
                 child_catalog,
                 self.metrics,
                 model_name=child_model or model,
+                telemetry=telemetry,
                 tool_admission=self.tool_executor.admission,
             ),
             self.subagent_options,
@@ -380,6 +384,7 @@ class AgentRuntime:
         assert current_task is not None
         cancel_event = self._cancel_events.setdefault(run_id, asyncio.Event())
         renewal = asyncio.create_task(self._renew_loop(run_id, fence, current_task, cancel_event))
+        telemetry_context = None
         try:
             state = await self._db(lambda repo: repo.runtime_state(run_id, self.worker_id, fence))
             checkpoint = state["checkpoint"]
@@ -397,6 +402,8 @@ class AgentRuntime:
                 checkpoint_state=dict(checkpoint.get("tool_context_state") or {}),
                 runtime_cache={},
             )
+            telemetry_context = bind(self.telemetry, tool_context)
+            telemetry_context.__enter__()
             pending_approval = checkpoint.get("pending_tool_approval")
             if pending_approval:
                 resumed = await self._resume_tool_approval(
@@ -602,6 +609,8 @@ class AgentRuntime:
                 await self._publish(run_id, event)
             return "failed"
         finally:
+            if telemetry_context:
+                telemetry_context.__exit__(None, None, None)
             renewal.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await renewal
@@ -832,24 +841,29 @@ class AgentRuntime:
                     "The requested runtime tool has no durable handler.",
                 )
             arguments = self._parse_tool_arguments(normalized[0]["function"]["arguments"])
-            return await runtime_handler(
-                RuntimeToolCall(
-                    definition=tool_definition,
-                    run_id=run_id,
-                    worker_id=self.worker_id,
-                    fence=fence,
-                    tool_call_id=normalized[0]["id"],
-                    arguments=arguments,
-                    provider_messages=provider_messages,
-                    round_content=round_content,
-                    round_reasoning=round_reasoning,
-                    usage=usage,
-                    normalized_calls=normalized,
-                    context=tool_context.for_tool(
+            return await tool_call(
+                None
+                if tool_definition.runtime_handler == "tool_approval"
+                else tool_definition.name,
+                lambda: runtime_handler(
+                    RuntimeToolCall(
+                        definition=tool_definition,
+                        run_id=run_id,
+                        worker_id=self.worker_id,
+                        fence=fence,
                         tool_call_id=normalized[0]["id"],
-                        batch_id=f"runtime-{normalized[0]['id']}",
-                    ),
-                )
+                        arguments=arguments,
+                        provider_messages=provider_messages,
+                        round_content=round_content,
+                        round_reasoning=round_reasoning,
+                        usage=usage,
+                        normalized_calls=normalized,
+                        context=tool_context.for_tool(
+                            tool_call_id=normalized[0]["id"],
+                            batch_id=f"runtime-{normalized[0]['id']}",
+                        ),
+                    )
+                ),
             )
 
         assistant_message = self._assistant_tool_call_message(
