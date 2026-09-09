@@ -6,11 +6,12 @@ React 静态构建与 FastAPI / Agent 运行器在同一台 ECS 上运行，使�
 
 ## 演示站部署记录
 
-2026-09-09 已验证：[CornAgent](https://cornagent.xiaotongyu.com/chat) 在 ECS 运行版本 `732b91b`，
+2026-09-09 已验证：[CornAgent](https://cornagent.xiaotongyu.com/chat) 在 ECS 运行版本 `adadc5f`，
 数据库迁移为 `0005_optional_users`。私有配置中启用 `CORNAGENT_USERS_ENABLED=true`、
 `CORNAGENT_AUTH_MODE=invisible`、`CORNAGENT_AUTH_ORIGIN=https://cornagent.xiaotongyu.com`，
 并使用 Secure Cookie；随机密钥仅保存在服务器私有配置中。项目模板仍默认关闭用户系统。
-公网真实对话、SSE、刷新恢复及跨用户访问隔离已验证，测试会话已删除；验证范围见[测试记录](verification.md)。
+真实对话、SSE、历史恢复及跨用户访问隔离已通过生产 HTTPS 接口验证，测试会话已删除；
+本次部署经 ECS 公网域名验证页面与健康状态，本机浏览器复核受连接故障影响未完成。验证范围见[测试记录](verification.md)。
 
 ## 文件与服务
 

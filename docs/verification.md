@@ -250,3 +250,17 @@ uv run --python 3.12 python scripts/record_readme_demo.py
 官方 Caddy 2.11.4 模板校验及本机真实代理测试通过：客户端协商 zstd/gzip，
 上游仅设置 `no-store`，四个 SSE 帧仍无压缩并在 0.002、0.212、0.420、0.628 秒到达；
 普通 JSON 仍返回 zstd。本段记录源码和本地验证，不代表该修复已部署线上。
+
+### ECS 发布验证（2026-09-09）
+
+`adadc5f` 已部署至 `/opt/cornagent/releases/adadc5f`，Caddy 2.6.4 已加载新版配置，
+`/readyz` 通过；数据库仍为 `0005_optional_users`，本次未变更 schema 或私有应用配置。
+服务均 active，原有 disabled 开机策略和每日维护 timer 设置保持不变。
+
+通过生产域名的 TLS/SNI 校验并直达本机 Caddy，客户端声明接受 zstd/gzip/deflate/br，
+SSE 响应无 `Content-Encoding`，包含 `no-store, no-transform`。真实模型返回 2283 字，
+274 个 `delta` 分布在 12.928 秒内，占 244 个不同的 50 毫秒时段。收到首批增量后断开，
+重连首先收到替换快照；终态快照与重新读取的历史一致，另一用户访问返回 404。
+本次测试会话已删除并确认不可再读取。ECS 经公网域名访问 `/readyz` 和 `/chat` 成功，
+页面引用新版 `index-BzoZ5279.js`；本机浏览器连接失败、直接 TLS 请求失败，
+因此未将本轮接口验证表述为公网浏览器验证。
