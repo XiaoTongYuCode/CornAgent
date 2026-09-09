@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <strong>An open-source web agent that runs on its own or inside your application.</strong><br />
-  Frontend and backend included, with streaming conversations, tool calls, parallel subtasks, and durable recovery.
+  <strong>Bring an AI agent into your application.</strong><br />
+  A complete React interface and Python runtime, with standalone deployment, embeddable UI, extensible tools, and execution recovery.
 </p>
 
 <p align="center">

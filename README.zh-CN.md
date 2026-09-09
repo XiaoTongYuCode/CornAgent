@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <strong>可独立运行，也能嵌入业务页面的开源 Web Agent。</strong><br />
-  从实时对话到工具调用、并行子任务与持久化恢复，前后端一并提供。
+  <strong>为你的应用接入 AI Agent。</strong><br />
+  完整的 React 界面与 Python 执行后端，支持独立部署、嵌入式交互、工具扩展与运行恢复。
 </p>
 
 <p align="center">
