@@ -63,6 +63,11 @@ def agent_status(request: Request, _identity: CurrentIdentity) -> dict[str, Any]
     settings = request.app.state.settings
     return {
         "available": _runtime(request).available,
+        "unavailable_reason": (
+            "model_not_configured" if _runtime(request).model_client is None
+            else "event_stream_not_configured" if _runtime(request).event_stream is None
+            else None
+        ),
         "file_input": {
             "enabled": bool(
                 _runtime(request).available

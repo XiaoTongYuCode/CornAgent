@@ -99,6 +99,7 @@ export class HttpAgentGateway {
   async status(signal?: AbortSignal) {
     const status = await this.api.get<{
       available: boolean
+      unavailable_reason?: string | null
       file_input: {
         enabled: boolean
         accepts: Array<{ mime_type: AgentFileMimeType; max_bytes: number; max_count: number }>
@@ -115,7 +116,7 @@ export class HttpAgentGateway {
       maxCount: status.file_input.max_count,
       maxTotalBytes: status.file_input.max_total_bytes,
     }
-    return { available: status.available, fileInput }
+    return { available: status.available, unavailableReason: status.unavailable_reason ?? null, fileInput }
   }
   async listSessions(cursor?: string | null, query?: string) {
     const params = new URLSearchParams()

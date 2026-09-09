@@ -62,7 +62,7 @@ class PasswordInput(EmailInput):
 class VerifyCodeInput(BaseModel):
     challenge_id: str = Field(min_length=32, max_length=64)
     code: str = Field(pattern=r"^\d{6}$")
-    password: str | None = Field(default=None, min_length=15, max_length=128)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
 class CredentialInput(BaseModel):

@@ -1,0 +1,7 @@
+.profile-page { box-sizing: border-box; width: 100%; max-width: 920px; margin: 0 auto; padding: 32px 24px; }
+.profile-page h1 { margin: 0; font-size: 24px; font-weight: 600; }
+.profile-page > p { margin: 12px 0 24px; color: var(--muted); }
+.profile-page .auth-account { justify-content: flex-start; gap: 12px; padding: 0; }
+.profile-page .auth-account button { height: 32px; padding: 0 12px; border-color: var(--border); background: var(--surface); }
+.profile-page .auth-account [role='status'] { text-align: left; }
+@media (max-width: 600px) { .profile-page { padding: 24px 16px; } }

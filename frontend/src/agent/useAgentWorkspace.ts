@@ -38,6 +38,7 @@ function mergeMessages(...collections: AgentMessage[][]) {
 export interface AgentWorkspace {
   open: boolean
   available: boolean | null
+  unavailableReason?: string | null
   fileInput: AgentFileInputCapabilities | null
   draftRevisionKey: string
   sessions: AgentSession[]
@@ -72,6 +73,7 @@ export function useAgentWorkspace(
   routeSessionId: string | null | undefined = undefined,
 ): AgentWorkspace {
   const [open, setOpen] = useState(false)
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
   const [available, setAvailable] = useState<boolean | null>(null)
   const [fileInput, setFileInput] = useState<AgentFileInputCapabilities | null>(null)
   const [sessions, setSessions] = useState<AgentSession[]>([])
@@ -217,6 +219,7 @@ export function useAgentWorkspace(
     void gateway.status().then(async (status) => {
       if (!active) return
       setAvailable(status.available)
+      setUnavailableReason(status.unavailableReason ?? null)
       setFileInput(status.fileInput ?? null)
       if (!status.available) return
       const items = await refreshSessions()
@@ -290,6 +293,7 @@ export function useAgentWorkspace(
           const status = await gateway.status(controller.signal)
           controller.signal.throwIfAborted()
           setAvailable(status.available)
+          setUnavailableReason(status.unavailableReason ?? null)
           setFileInput(status.fileInput ?? null)
           if (!status.available) throw new Error('CornAgent 尚未配置模型和 Redis。')
         }
@@ -527,7 +531,7 @@ export function useAgentWorkspace(
   }, [gateway, session?.id])
 
   return useMemo(() => ({
-    open, available, fileInput, draftRevisionKey: `${principalKey}:${session?.id ?? 'new'}`, sessions, session, snapshot, busy, loadingOlder, loadingMoreSessions,
+    open, available, unavailableReason, fileInput, draftRevisionKey: `${principalKey}:${session?.id ?? 'new'}`, sessions, session, snapshot, busy, loadingOlder, loadingMoreSessions,
     sessionsNextCursor, error, setOpen, ask, send: start, newSession, selectSession,
     deleteSession, uploadFile, deleteFile, loadMoreSessions, searchSessions, loadOlder, respond, cancel,
     regenerate: (messageId: string) => {
@@ -541,7 +545,7 @@ export function useAgentWorkspace(
       return runVersionAction(expectedSessionId, () => gateway.edit(messageId, content))
     },
     switchVersion: switchMessageVersion,
-  }), [available, ask, busy, cancel, deleteFile, deleteSession, error, fileInput, gateway, loadMoreSessions, loadOlder, loadingMoreSessions, loadingOlder, newSession, open, principalKey, respond, runVersionAction, searchSessions, selectSession, session, sessions, sessionsNextCursor, snapshot, start, switchMessageVersion, uploadFile])
+  }), [available, unavailableReason, ask, busy, cancel, deleteFile, deleteSession, error, fileInput, gateway, loadMoreSessions, loadOlder, loadingMoreSessions, loadingOlder, newSession, open, principalKey, respond, runVersionAction, searchSessions, selectSession, session, sessions, sessionsNextCursor, snapshot, start, switchMessageVersion, uploadFile])
 }
 
 export function applyEvent(

@@ -1,5 +1,7 @@
 import type { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { KeyRound, Mail, LockKeyhole } from 'lucide-react'
+import cornAgentIcon from '../../../assets/brand/cornagent.svg'
 import { I18nProvider, useI18n } from '../i18n'
 import { navigate } from './navigation'
 import './auth.css'
@@ -14,7 +16,10 @@ async function request<T>(path: string, body: unknown = {}): Promise<T> {
     headers: { 'Content-Type': 'application/json', 'X-CornAgent-Request': '1' },
     body: JSON.stringify(body),
   })
-  if (!response.ok) throw new Error('authentication_failed')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.error?.code ?? 'authentication_failed')
+  }
   return response.json() as Promise<T>
 }
 // Deduplicate StrictMode bootstrap so initial device cookies cannot race.
@@ -118,175 +123,221 @@ function LoginScreen({
       setBusy(false)
     }
   }
+  const verifying = method === 'code' && Boolean(challenge)
+  function resetChallenge() {
+    setChallenge('')
+    setCode('')
+    setPassword('')
+    setNewPassword(false)
+    setError(false)
+  }
   return (
     <main className="auth-page">
-      <section className="auth-card" aria-labelledby="auth-title">
-        <h1 id="auth-title">CornAgent</h1>
-        <button onClick={toggleLocale}>{t('authLanguage')}</button>
-        {!ready ? (
-          <>
-            <p role="status">{t(failed ? 'authFailed' : 'authLoading')}</p>
-            {failed && (
-              <button
-                onClick={() => {
-                  void onLogin()
-                }}
-              >
-                {t('authRetry')}
-              </button>
-            )}
-          </>
-        ) : (
-          <>
-            <h2>{t('authSignIn')}</h2>
-            <div className="auth-tabs">
-              {(['code', 'password'] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={method === value}
-                  disabled={busy}
-                  onClick={() => {
-                    setMethod(value)
-                    setPassword('')
-                    setError(false)
-                  }}
-                >
-                  {t(value === 'code' ? 'authEmailCode' : 'authPassword')}
-                </button>
-              ))}
-            </div>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                void perform(async () => {
-                  if (method === 'password') await request('password/login', { email, password })
-                  else if (!challenge) {
-                    const result = await request<{ challenge_id: string }>('email/code', { email })
-                    setChallenge(result.challenge_id)
-                    return
-                  } else
-                    await request('email/verify', {
-                      challenge_id: challenge,
-                      code,
-                      ...(newPassword ? { password } : {}),
-                    })
-                  setPassword('')
-                  navigate('/chat')
-                  await onLogin()
-                })
-              }}
-            >
-              <label>
-                {t('authEmail')}
-                <input
-                  required
-                  type="email"
-                  autoComplete="username"
-                  maxLength={254}
-                  value={email}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setEmail(event.target.value)
-                    setChallenge('')
-                    setCode('')
-                  }}
-                />
-              </label>
-              {method === 'code' && challenge && (
+      <a className="auth-brand" href="/chat" aria-label="CornAgent">
+        <img src={cornAgentIcon} alt="" />
+        <span>CornAgent</span>
+      </a>
+      <div className="auth-main">
+        <section className="auth-card" aria-labelledby="auth-title" aria-busy={busy}>
+          <h1 id="auth-title">{t(verifying ? 'authCheckEmail' : 'authSignIn')}</h1>
+          {!ready ? (
+            <>
+              <p className="auth-description" role="status">{t(failed ? 'authFailed' : 'authLoading')}</p>
+              {failed && <button className="auth-primary" onClick={() => { void onLogin() }}>{t('authRetry')}</button>}
+            </>
+          ) : (
+            <>
+              {!verifying && (
                 <>
-                  <p role="status">{t('authCodeSent')}</p>
-                  <label>
-                    {t('authEmailCode')}
-                    <input
-                      required
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      pattern="[0-9]{6}"
-                      maxLength={6}
-                      value={code}
-                      onChange={(event) => setCode(event.target.value)}
-                    />
-                  </label>
-                  <label className="auth-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={newPassword}
-                      onChange={(event) => setNewPassword(event.target.checked)}
-                    />
-                    {t('authSetPassword')}
-                  </label>
                   <button
+                    className="auth-passkey"
                     type="button"
                     disabled={busy}
                     onClick={() => {
-                      setChallenge('')
-                      setCode('')
+                      void perform(async () => {
+                        const result = await request<{ challenge_id: string; options: RequestOptions }>(
+                          'passkeys/login/options',
+                        )
+                        const { startAuthentication } = await import('@simplewebauthn/browser')
+                        const credential = await startAuthentication({ optionsJSON: result.options })
+                        await request('passkeys/login/verify', {
+                          challenge_id: result.challenge_id,
+                          credential,
+                        })
+                        navigate('/chat')
+                        await onLogin()
+                      })
                     }}
                   >
-                    {t('authResend')}
+                    <KeyRound size={16} aria-hidden="true" />
+                    {t('authPasskey')}
                   </button>
+                  <div className="auth-divider" />
                 </>
               )}
-              {(method === 'password' || (challenge && newPassword)) && (
-                <label>
-                  {t('authPassword')}
-                  <input
-                    required
-                    type="password"
-                    autoComplete={method === 'password' ? 'current-password' : 'new-password'}
-                    minLength={method === 'password' ? 1 : 15}
-                    maxLength={128}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                  {method === 'code' && <small>{t('authPasswordHint')}</small>}
-                </label>
-              )}
-              <button className="auth-primary" disabled={busy}>
-                {t(method === 'code' && !challenge ? 'authSendCode' : 'authSignIn')}
-              </button>
-            </form>
-            <button
-              disabled={busy}
-              onClick={() => {
-                void perform(async () => {
-                  const result = await request<{ challenge_id: string; options: RequestOptions }>(
-                    'passkeys/login/options',
-                  )
-                  const { startAuthentication } = await import('@simplewebauthn/browser')
-                  const credential = await startAuthentication({ optionsJSON: result.options })
-                  await request('passkeys/login/verify', {
-                    challenge_id: result.challenge_id,
-                    credential,
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (busy) return
+                  void perform(async () => {
+                    if (method === 'password') await request('password/login', { email, password })
+                    else if (!challenge) {
+                      const result = await request<{ challenge_id: string }>('email/code', { email })
+                      setChallenge(result.challenge_id)
+                      return
+                    } else
+                      await request('email/verify', {
+                        challenge_id: challenge,
+                        code,
+                        ...(newPassword ? { password } : {}),
+                      })
+                    setPassword('')
+                    navigate('/chat')
+                    await onLogin()
                   })
-                  navigate('/chat')
-                  await onLogin()
-                })
-              }}
-            >
-              {t('authPasskey')}
-            </button>
-            <p className="auth-help">{t('authSignupHint')}</p>
-            {error && <p role="alert">{t('authFailed')}</p>}
-          </>
-        )}
-      </section>
+                }}
+              >
+                {verifying ? (
+                  <>
+                    <div className="auth-description" role="status">
+                      <p>{t('authCodeSent')}</p>
+                      <div className="auth-email-summary">{email}</div>
+                    </div>
+                    <label className="auth-field">
+                      <span className="sr-only">{t('authEmailCode')}</span>
+                      <span className="auth-input">
+                        <Mail size={16} aria-hidden="true" />
+                        <input
+                          key="verification-code"
+                          autoFocus
+                          required
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder={t('authCodePlaceholder')}
+                          pattern="[0-9]{6}"
+                          maxLength={6}
+                          value={code}
+                          disabled={busy}
+                          onChange={(event) => setCode(event.target.value)}
+                        />
+                      </span>
+                    </label>
+                  </>
+                ) : (
+                  <label className="auth-field">
+                    <span className="sr-only">{t('authEmail')}</span>
+                    <span className="auth-input">
+                      <Mail size={16} aria-hidden="true" />
+                      <input
+                        key="email"
+                        autoFocus
+                        required
+                        type="email"
+                        autoComplete="username"
+                        placeholder={t('authEmailPlaceholder')}
+                        maxLength={254}
+                        value={email}
+                        disabled={busy}
+                        onChange={(event) => {
+                          setEmail(event.target.value)
+                          resetChallenge()
+                        }}
+                      />
+                    </span>
+                  </label>
+                )}
+                {(method === 'password' || (verifying && newPassword)) && (
+                  <label className="auth-field">
+                    <span className="sr-only">{t('authPassword')}</span>
+                    <span className="auth-input">
+                      <LockKeyhole size={16} aria-hidden="true" />
+                      <input
+                        required
+                        type="password"
+                        placeholder={t('authPassword')}
+                        autoComplete={method === 'password' ? 'current-password' : 'new-password'}
+                        minLength={method === 'password' ? 1 : 8}
+                        maxLength={128}
+                        value={password}
+                        disabled={busy}
+                        onChange={(event) => setPassword(event.target.value)}
+                      />
+                    </span>
+                    {method === 'code' && <small>{t('authPasswordHint')}</small>}
+                  </label>
+                )}
+                <button className="auth-primary" disabled={busy} type="submit">
+                  {t(busy ? 'authWorking' : 'authContinue')}
+                </button>
+                {verifying && (
+                  <>
+                    <label className="auth-checkbox">
+                      <input type="checkbox" checked={newPassword} disabled={busy}
+                        onChange={(event) => setNewPassword(event.target.checked)} />
+                      {t('authSetPassword')}
+                    </label>
+                    <div className="auth-secondary-actions">
+                      <button className="auth-text-button" type="button" disabled={busy} onClick={resetChallenge}>
+                        {t('authChangeEmail')}
+                      </button>
+                      <button className="auth-text-button" type="button" disabled={busy}
+                        onClick={() => {
+                          void perform(async () => {
+                            const result = await request<{ challenge_id: string }>('email/code', { email })
+                            setChallenge(result.challenge_id)
+                            setCode('')
+                          })
+                        }}>
+                        {t('authResend')}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </form>
+              {!verifying && (
+                <button className="auth-text-button auth-method-switch" type="button" disabled={busy}
+                  onClick={() => {
+                    setMethod(method === 'code' ? 'password' : 'code')
+                    resetChallenge()
+                  }}>
+                  {t(method === 'code' ? 'authUsePassword' : 'authUseCode')}
+                </button>
+              )}
+              {error && <p role="alert">{t('authFailed')}</p>}
+            </>
+          )}
+        </section>
+      </div>
+      <footer className="auth-footer">
+        <p>{t('authSignupHint')}</p>
+        <nav aria-label={t('authFooter')}>
+          <span>© {new Date().getFullYear()} CornAgent</span>
+          <a href="https://github.com/XiaoTongYuCode/CornAgent" target="_blank" rel="noreferrer">GitHub</a>
+          <button type="button" onClick={toggleLocale}>{t('authLanguage')}</button>
+        </nav>
+      </footer>
     </main>
   )
 }
+
 function AccountControls({ onLogout }: { onLogout: () => Promise<void> }) {
   const { t } = useI18n()
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<'success' | 'error' | null>(null)
+  const [status, setStatus] = useState<'authPasskeyAdded' | 'authFailed' | 'authReauthenticate' | 'authPasskeyUnsupported' | 'authPasskeyOrigin' | 'authPasskeyCancelled' | null>(null)
   const perform = async (operation: () => Promise<unknown>) => {
     setBusy(true)
     setStatus(null)
     try {
       await operation()
-      setStatus('success')
-    } catch {
-      setStatus('error')
+      setStatus('authPasskeyAdded')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      const name = error instanceof Error ? error.name : ''
+      setStatus(message === 'reauthentication_required' ? 'authReauthenticate'
+        : message === 'passkey_origin' || name === 'SecurityError' ? 'authPasskeyOrigin'
+        : message === 'passkey_unsupported' ? 'authPasskeyUnsupported'
+        : name === 'NotAllowedError' || name === 'AbortError' ? 'authPasskeyCancelled'
+        : 'authFailed')
     } finally {
       setBusy(false)
     }
@@ -297,6 +348,10 @@ function AccountControls({ onLogout }: { onLogout: () => Promise<void> }) {
         disabled={busy}
         onClick={() => {
           void perform(async () => {
+            if (/^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname) || window.location.hostname.includes(':')) {
+              throw new Error('passkey_origin')
+            }
+            if (!window.isSecureContext || !window.PublicKeyCredential) throw new Error('passkey_unsupported')
             const result = await request<{ challenge_id: string; options: CreationOptions }>(
               'passkeys/register/options',
             )
@@ -320,7 +375,7 @@ function AccountControls({ onLogout }: { onLogout: () => Promise<void> }) {
         {t('authLogout')}
       </button>
       {status && (
-        <span role="status">{t(status === 'success' ? 'authPasskeyAdded' : 'authFailed')}</span>
+        <span role="status">{t(status)}</span>
       )}
     </div>
   )

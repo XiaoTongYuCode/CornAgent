@@ -97,7 +97,7 @@ export function AgentConversation({ workspace, userName, focusPrompt = false, on
   return <section className={`agent-conversation${emptyConversation ? ' agent-conversation--empty' : ''}`} aria-label={t('conversation')}>
     {workspace.error && <div className="agent-error-banner" role="alert">{localizeSystemMessage(workspace.error, locale)}</div>}
     {workspace.available === false
-      ? <div className="agent-empty-state"><h2>{t('unavailable')}</h2><p>{t('unavailableHelp')}</p></div>
+      ? <div className="agent-empty-state"><h2>{t('unavailable')}</h2><p>{t(workspace.unavailableReason === 'model_not_configured' ? 'modelNotConfigured' : workspace.unavailableReason === 'event_stream_not_configured' ? 'eventStreamNotConfigured' : 'unavailableHelp')}</p></div>
       : emptyConversation
         ? <div className="agent-new-conversation">
           <div className="agent-new-conversation__title">

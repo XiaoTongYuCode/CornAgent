@@ -8,6 +8,7 @@ import { CornAgentProvider } from './agent/CornAgentProvider'
 import { useAgent } from './agent/AgentContext'
 import { navigate, useMobileLayout, usePathname } from './app/navigation'
 import { ProjectContactLinks } from './app/ProjectContactLinks'
+import { ProfilePage } from './app/ProfilePage'
 import { SidebarExamplePage } from './app/SidebarExamplePage'
 import { Sidebar } from './components/Sidebar'
 import { useI18n } from './i18n'
@@ -29,7 +30,8 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
   const mobileToggleRef = useRef<HTMLButtonElement>(null)
   const example = path === '/sidebar'
   const renderingPreview = path === '/rendering'
-  const chat = !example && !renderingPreview
+  const profile = path === '/profile'
+  const chat = !example && !renderingPreview && !profile
   const workspace = useAgent()
   const collapsed = !mobile && sidebarCollapsed
   const currentRun = workspace.snapshot?.run ?? workspace.session?.activeRun
@@ -89,6 +91,11 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
         home={chat && sessionId === null}
         example={example}
         renderingPreview={renderingPreview}
+        profile={profile}
+        onProfile={accountControls ? () => {
+          setMobileOpen(false)
+          navigate('/profile')
+        } : undefined}
         loadingMore={workspace.loadingMoreSessions}
         hasMore={Boolean(workspace.sessionsNextCursor)}
         onLoadMore={workspace.loadMoreSessions}
@@ -114,8 +121,9 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
         }}
       />
       <main className={`cornagent-main${renderingPreview ? ' cornagent-main--rendering' : ''}`} inert={mobile && mobileOpen}>
-        {accountControls}
-        {renderingPreview ? (
+        {profile ? (
+          <ProfilePage accountControls={accountControls} />
+        ) : renderingPreview ? (
           <>
             <header className="topbar"><strong>{t('agentRendering')}</strong></header>
             <ProcessTransitionPreview />
@@ -140,7 +148,7 @@ export default function App() {
   const match = path.match(/^\/chat\/([^/]+)$/)
   const sessionId = match ? decodeURIComponent(match[1]) : null
   return (
-    <AuthGate>{(principal, controls) => <CornAgentProvider key={principal} principalKey={principal} sessionId={path === '/sidebar' || path === '/rendering' ? undefined : sessionId}>
+    <AuthGate>{(principal, controls) => <CornAgentProvider key={principal} principalKey={principal} sessionId={path === '/sidebar' || path === '/rendering' || path === '/profile' ? undefined : sessionId}>
       <Application path={path} sessionId={sessionId} accountControls={controls} />
     </CornAgentProvider>}</AuthGate>
   )

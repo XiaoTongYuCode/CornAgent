@@ -428,3 +428,31 @@ def test_revocation_during_passkey_verification_prevents_registration(auth_clien
             ).status_code
             == 401
         )
+
+
+def test_eight_character_password_registration_and_login(auth_client):
+    with auth_client() as client:
+        email = "eight@example.com"
+        result = client.post("/api/v1/auth/email/code", json={"email": email})
+        body = {
+            "challenge_id": result.json()["challenge_id"],
+            "code": client.mailbox.messages[-1][1],
+            "password": "1234567",
+        }
+        assert client.post("/api/v1/auth/email/verify", json=body).status_code == 422
+        body["password"] = "12345678"
+        assert client.post("/api/v1/auth/email/verify", json=body).status_code == 200
+        assert client.post("/api/v1/auth/logout").status_code == 200
+        assert client.post(
+            "/api/v1/auth/password/login", json={"email": email, "password": "12345678"}
+        ).status_code == 200
+
+
+def test_agent_status_explains_missing_model_independently_of_event_stream(auth_client):
+    with auth_client() as client:
+        code_login(client)
+        runtime = client.app.state.agent_runtime
+        runtime.model_client = None
+        status = client.get("/api/v1/agent/status").json()
+        assert status["available"] is False
+        assert status["unavailable_reason"] == "model_not_configured"

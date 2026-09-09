@@ -1,4 +1,4 @@
-import { ChevronDown, House, MessagesSquare, PanelRight, Plus, SquarePlay } from 'lucide-react'
+import { ChevronDown, House, MessagesSquare, PanelRight, Plus, SquarePlay, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AgentSession } from '../../agent/types'
 import { AgentSessionActionsMenu } from '../../agent/AgentSessionActionsMenu'
@@ -11,6 +11,8 @@ export interface SidebarNavigationProps {
   home: boolean
   example: boolean
   renderingPreview: boolean
+  profile?: boolean
+  onProfile?(): void
   loadingMore: boolean
   hasMore: boolean
   onHome(): void
@@ -37,6 +39,8 @@ export function SidebarNavigation({
   home,
   example,
   renderingPreview,
+  profile = false,
+  onProfile,
   loadingMore,
   hasMore,
   onHome,
@@ -89,6 +93,12 @@ export function SidebarNavigation({
         >
           {t('agentRendering')}
         </SidebarNavItem>
+        {onProfile && (
+          <SidebarNavItem active={profile} onClick={onProfile}
+            icon={<UserRound size={16} strokeWidth={1.75} aria-hidden="true" />}>
+            {t('myProfile')}
+          </SidebarNavItem>
+        )}
       </div>
       <section className={chatsOpen ? 'nav-section open' : 'nav-section'}>
         <div className="nav-section-heading">
