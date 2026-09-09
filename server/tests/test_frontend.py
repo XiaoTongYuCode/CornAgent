@@ -8,7 +8,7 @@ def test_frontend_routes_support_direct_navigation_and_assets(settings, client_f
     settings.frontend_dist = dist
 
     with client_factory() as client:
-        for route in ("/", "/chat", "/chat/example-session", "/sidebar", "/rendering"):
+        for route in ("/", "/chat", "/chat/example-session", "/sidebar", "/rendering", "/usage"):
             response = client.get(route)
             assert response.status_code == 200
             assert response.text == index

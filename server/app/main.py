@@ -298,6 +298,7 @@ def create_app(
         @app.get("/")
         @app.get("/chat")
         @app.get("/chat/{session_id}")
+        @app.get("/usage")
         @app.get("/sidebar")
         @app.get("/rendering")
         def spa(session_id: str | None = None):
