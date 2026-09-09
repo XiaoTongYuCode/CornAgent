@@ -57,7 +57,9 @@ Message 使用 parent_message_id、version_group_id、supersedes_message_id 保�
 
 IP 来自 ASGI `request.client`，应用不自行信任 `X-Forwarded-For`、`X-Real-IP` 等请求头。
 由 ASGI 服务配置可信代理并解析客户端地址；IPv6 规范化，IPv4 映射地址归入对应 IPv4 配额，缺失或非法地址归入统一受限桶。
-同一公网出口的访问者共享配额。IP 仅用于限流，不提供登录或数据隔离。
+上述规则适用于用户系统关闭时：同一公网出口的访问者共享配额，IP 仅用于限流，不提供登录或数据隔离。
+
+开启[用户系统](authentication.md)后，新 Run 按鉴权后的用户身份计数，每用户仍默认 6 次/60 秒；无感模式使用 IP＋浏览器 Cookie，账号模式使用稳定账号 ID。内置适配器为每个用户分配独立 tenant，因此 tenant 配额也按该用户作用域计算，不再是全站总额；实例执行并发限制仍适用。
 配置 Redis 时以哈希键和原子计数跨实例共享配额；Redis 故障返回 503。未配置 Redis 时仅在单进程内计数。
 
 运行器支持 provider retry、DeepSeek 503 fallback、上下文压缩、3 MiB checkpoint 限制、stream batching、并发控制与指标。

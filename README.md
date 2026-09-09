@@ -22,6 +22,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> ·
+  <a href="#user-system">Users</a> ·
   <a href="#embed-in-your-application">Integration</a> ·
   <a href="#tools-and-subtasks">Tools</a> ·
   <a href="#recovery-and-data-persistence">Recovery</a> ·
@@ -50,6 +51,7 @@ Building an agent product takes more than calling a model. It also requires sess
 | Live conversations | SSE streaming, reasoning, tool groups, and Markdown, code block, and table rendering |
 | Pause and resume | Agents wait for user answers; page refresh recovery and safe checkpoint takeover after service restarts. See [recovery boundaries](#recovery-and-data-persistence) |
 | Parallel subtasks | The main agent dispatches subtasks, waits for them, and collects results; cancellation, history recovery, and progress display are supported |
+| Optional user system | Disabled by default; invisible visitor identification, email/password, email codes, and passkeys, with per-user data isolation when enabled |
 | Sessions and branches | Paginated history, message editing, response regeneration, branch switching, and session deletion |
 | Images and PDFs | Attachment uploads, on-demand paginated PDF reading, and local or S3-compatible storage |
 | Embedded integration | A standalone chat page and resizable sidebar share the same provider, sessions, and message components |
@@ -86,6 +88,30 @@ All configuration options are listed in [.env.example](.env.example) at the proj
 - **Runtime settings:** Listening addresses, ports, concurrency, timeouts, context budgets, and attachment limits are configurable.
 
 Model API keys are used only on the server, and `.env` is excluded from version control. Without a model API key, the service can still start and load history; the interface indicates that the agent is unavailable.
+
+## User System
+
+The user system is **disabled by default**, so the local quick start still uses a shared workspace. Enable it to choose between two authentication modes:
+
+| Mode | Experience | Intended use |
+| --- | --- | --- |
+| `invisible` (default) | No registration or forms; identifies visitors using the client IP and a random browser cookie | Private history within the same browser and IP; changing IP, clearing cookies, or switching browsers selects another workspace |
+| `account` | Email-code sign-in or registration, email/password sign-in, and passkeys | Cross-device access and account recovery; requires SMTP, with optional password setup or reset during email verification |
+
+When enabled, sessions, messages, attachments, runs, and SSE are isolated by user. Identity and email delivery adapters are replaceable; the login UI lives in the application layer, and shared Agent components do not depend on the account system. Invisible mode does not collect hardware fingerprints or prove a person's identity. Organizations, administrators, and roles are not included.
+
+For local invisible mode, set these values in the root `.env`:
+
+```dotenv
+CORNAGENT_USERS_ENABLED=true
+CORNAGENT_AUTH_MODE=invisible
+CORNAGENT_AUTH_ORIGIN=http://127.0.0.1:5173
+CORNAGENT_AUTH_COOKIE_SECURE=false
+```
+
+Generate a persistent random secret with `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'` and save it as `CORNAGENT_AUTH_SECRET` in `.env`. In production, use the actual HTTPS origin and keep `CORNAGENT_AUTH_COOKIE_SECURE=true`. Apply migrations using the upgrade steps below and restart. See the [user system guide](docs/authentication.md) for full configuration, identity switching, and extension interfaces (Simplified Chinese).
+
+The [live site](https://cornagent.xiaotongyu.com/chat) has invisible login enabled; its deployment record is in [ECS deployment](docs/ecs-app.md). This does not change the project defaults. Existing shared history is not assigned to the first visitor, and switching authentication modes does not merge history.
 
 ## Embed in Your Application
 
@@ -193,7 +219,7 @@ CORNAGENT_TEST_POSTGRES_URL=postgresql+psycopg://localhost:5432/cornagent \
 CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 ```
 
-By default, the project listens locally, and all browsers share one workspace. When exposing the service externally, configure access controls in the host system. Built-in login and multi-tenant isolation are not currently provided.
+By default, the project listens locally with the user system disabled, and all browsers share one workspace. For external deployments, enable the user system above or integrate a host identity adapter. See [ECS deployment](docs/ecs-app.md); [Vercel deployment](docs/vercel.md) remains an optional alternative.
 
 ## Documentation
 
@@ -203,6 +229,8 @@ The detailed guides below are currently available in **Simplified Chinese**.
 | --- | --- |
 | [Frontend](frontend/README.md) | Page organization, themes, localization, and message interactions |
 | [Frontend integration](docs/frontend-integration.md) | Provider, launcher, sidebar, and host configuration |
+| [User system](docs/authentication.md) | Modes, cookies, email and passkeys, identity and email adapters |
+| [ECS deployment](docs/ecs-app.md) | Full-stack releases, runtime configuration, verification, and rollback |
 | [Backend](server/README.md) | Service startup, dependencies, configuration, and checks |
 | [Architecture](docs/architecture.md) | Module responsibilities and request flow |
 | [Agent runtime](docs/runtime.md) | State machine, recovery, SSE, and message trees |
@@ -220,5 +248,3 @@ When updating this README, keep the [Simplified Chinese version](README.zh-CN.md
 ## License
 
 CornAgent is released under the **[MIT License](LICENSE)**. See [NOTICE](NOTICE) for attribution to source projects and third-party dependencies.
-
-Optional user accounts are disabled by default. See [authentication configuration and extension points](docs/authentication.md).

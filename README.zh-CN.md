@@ -22,6 +22,7 @@
 
 <p align="center">
   <a href="#快速开始">快速开始</a> ·
+  <a href="#用户系统">用户系统</a> ·
   <a href="#嵌入业务页面">嵌入页面</a> ·
   <a href="docs/subagents.md">扩展工具</a> ·
   <a href="#故障恢复与数据持久化">故障恢复</a> ·
@@ -50,6 +51,7 @@
 | 实时对话 | SSE 流式回复、思考过程、工具分组，以及 Markdown、代码块和表格渲染 |
 | 暂停与恢复 | Agent 提问后等待用户；支持刷新恢复与服务重启后的安全检查点接管，见[恢复边界](#故障恢复与数据持久化) |
 | 并行子任务 | 主 Agent 派发、等待和收取子任务结果；支持取消、历史恢复与过程展示 |
+| 可选用户系统 | 默认关闭；支持无感访客识别、邮箱密码、邮箱验证码和 Passkey，启用后按用户隔离数据 |
 | 会话与分支 | 历史分页、编辑消息、重新生成、切换分支与删除会话 |
 | 图片与 PDF | 上传附件，按需分页读取 PDF；本地或 S3 兼容存储 |
 | 页面内集成 | 独立聊天页与可调整宽度的侧边栏共用 Provider、会话和消息组件 |
@@ -86,6 +88,30 @@ make dev
 - **运行参数**：监听地址、端口、并发、超时、上下文预算及附件限制均可配置。
 
 模型密钥只在服务端使用，`.env` 不进入版本控制。未配置模型密钥时，服务仍能启动并读取历史，界面会显示 Agent 暂不可用。
+
+## 用户系统
+
+用户系统**默认关闭**，本地快速开始仍使用共享工作区。开启后，可选择以下两种鉴权方式：
+
+| 模式 | 使用体验 | 适用范围 |
+| --- | --- | --- |
+| `invisible`（默认） | 无需注册或填写表单，以客户端 IP＋浏览器随机 Cookie 识别访客 | 同一浏览器和 IP 下保留私有历史；换 IP、清除 Cookie 或换浏览器会进入另一份工作区 |
+| `account` | 邮箱验证码登录或注册、邮箱加密码登录、Passkey 登录 | 需要跨设备访问和找回账号；需配置 SMTP，验证邮箱时可设置或重置密码 |
+
+启用后，会话、消息、附件、Run 和 SSE 按用户隔离。身份适配器和邮件发送器可替换，登录界面位于应用层，共享 Agent 组件不依赖账号系统。无感模式不采集硬件指纹，也不证明真实人的身份；系统不包含组织、管理员或角色管理。
+
+本机无感模式示例，在根目录 `.env` 中设置：
+
+```dotenv
+CORNAGENT_USERS_ENABLED=true
+CORNAGENT_AUTH_MODE=invisible
+CORNAGENT_AUTH_ORIGIN=http://127.0.0.1:5173
+CORNAGENT_AUTH_COOKIE_SECURE=false
+```
+
+另生成持久随机密钥：`python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`，将结果保存到 `.env` 的 `CORNAGENT_AUTH_SECRET`。生产环境使用实际 HTTPS 来源，并保持 `CORNAGENT_AUTH_COOKIE_SECURE=true`。按下方升级步骤执行迁移并重启，完整配置、身份切换与扩展接口见[用户系统指南](docs/authentication.md)。
+
+[在线体验](https://cornagent.xiaotongyu.com/chat)已开启无感登录；演示站部署记录见 [ECS 整站部署](docs/ecs-app.md)，不改变项目的默认配置。旧共享历史不会自动归属首个访客，切换鉴权模式也不会合并历史。
 
 ## 嵌入业务页面
 
@@ -193,7 +219,7 @@ CORNAGENT_TEST_POSTGRES_URL=postgresql+psycopg://localhost:5432/cornagent \
 CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 ```
 
-项目默认监听本机，所有浏览器共用一个工作区。对外提供服务时，需由宿主系统配置访问控制；当前没有内置登录与多租户隔离。
+项目默认监听本机且关闭用户系统，所有浏览器共享工作区。对外部署时，可开启上述用户系统或接入宿主身份适配器；部署步骤见 [ECS 整站部署](docs/ecs-app.md)，Vercel 作为[可选部署方式](docs/vercel.md)保留。
 
 ## 文档
 
@@ -201,6 +227,8 @@ CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 | --- | --- |
 | [前端说明](frontend/README.md) | 页面组织、主题、多语言与消息交互 |
 | [前端接入](docs/frontend-integration.md) | Provider、开启按钮、侧边栏与宿主配置 |
+| [用户系统](docs/authentication.md) | 模式选择、Cookie、邮箱与 Passkey、身份及邮件适配器 |
+| [ECS 部署](docs/ecs-app.md) | 整站发布、运行配置、验证与回退 |
 | [后端说明](server/README.md) | 服务启动、依赖、配置与检查 |
 | [架构说明](docs/architecture.md) | 模块分工与请求链路 |
 | [Agent 运行时](docs/runtime.md) | 状态机、恢复、SSE 与消息树 |
@@ -218,5 +246,3 @@ CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 ## 许可
 
 CornAgent 使用 **[MIT 许可证](LICENSE)**。移植来源与第三方依赖说明见 [NOTICE](NOTICE)。
-
-可选用户系统默认关闭，见[鉴权配置与扩展接口](docs/authentication.md)。

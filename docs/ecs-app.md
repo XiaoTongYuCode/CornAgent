@@ -4,6 +4,14 @@
 
 React 静态构建与 FastAPI / Agent 运行器在同一台 ECS 上运行，使用本机 PostgreSQL 和 Redis。Caddy 接收公网 HTTPS 请求并自动签发、续签证书，反向代理至仅监听 `127.0.0.1:8000` 的应用；SSE 不缓冲。
 
+## 演示站部署记录
+
+2026-09-09 已验证：[CornAgent](https://cornagent.xiaotongyu.com/chat) 在 ECS 运行版本 `732b91b`，
+数据库迁移为 `0005_optional_users`。私有配置中启用 `CORNAGENT_USERS_ENABLED=true`、
+`CORNAGENT_AUTH_MODE=invisible`、`CORNAGENT_AUTH_ORIGIN=https://cornagent.xiaotongyu.com`，
+并使用 Secure Cookie；随机密钥仅保存在服务器私有配置中。项目模板仍默认关闭用户系统。
+公网真实对话、SSE、刷新恢复及跨用户访问隔离已验证，测试会话已删除；验证范围见[测试记录](verification.md)。
+
 ## 文件与服务
 
 - 发布目录：`/opt/cornagent/releases/<commit>`；`/opt/cornagent/current` 指向当前版本。
@@ -25,9 +33,11 @@ React 静态构建与 FastAPI / Agent 运行器在同一台 ECS 上运行，使�
 
 Uvicorn 仅信任本机 Caddy 的代理头，不使用 Vercel 的 `forwarded-allow-ips '*'` 设置。模型和工具 API 必须从 ECS 实测可达。
 
-默认包源不可达时，可先用 `uv export --locked --no-dev --no-emit-project` 导出 requirements，再用 `uv pip sync --require-hashes --python .venv/bin/python --index-url <镜像地址> <requirements文件>` 安装；版本与文件哈希仍由锁文件约束。远程执行器超时后应先检查并停止本次残留安装进程，避免重复安装等待同一依赖锁。
+默认包源不可达时，可先用 `uv export --locked --no-dev --no-emit-project` 导出 requirements，再用 `uv pip sync --require-hashes --python .venv/bin/python --index-url <镜像地址> <requirements文件>` 安装依赖后，再用 `uv pip install --no-deps --python .venv/bin/python --index-url <镜像地址> -e .` 安装当前项目（均在 `server/` 执行）；依赖版本与文件哈希仍由锁文件约束。远程执行器超时后应先检查并停止本次残留安装进程，避免重复安装等待同一依赖锁。
 
 ## 运维与回退
+
+演示站按部署方要求关闭 `cornagent`、`caddy`、`postgresql-17`、`cornagent-redis` 的开机自启及每日维护定时器；服务器重启后需手动运行 `systemctl start postgresql-17 cornagent-redis cornagent caddy`。Caddy 运行期间继续自动续签 HTTPS 证书。每次 schema 升级前的手动备份独立于每日定时任务。
 
 使用 `systemctl status cornagent caddy`、`journalctl -u cornagent` 和 `journalctl -u caddy` 查看状态。应用崩溃自动重启，Run 恢复依赖数据库检查点和租约；手动重启后应检查历史与运行状态。
 

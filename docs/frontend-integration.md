@@ -51,6 +51,17 @@ function MyButton() {
 
 Provider 统一管理主题、语言与工作区，偏好变化不会重建 gateway。样式入口包含项目的页面基础样式与主题变量；源码集成到已有应用时，应由宿主统一引入并管理基础样式。当前入口随项目源码提供。
 
+## 用户系统接入
+
+上述最小示例适用于用户系统关闭或宿主已建立身份的情况。项目应用层的 `AuthGate` 在挂载工作区前调用
+`POST /api/v1/auth/session`：关闭模式直接进入共享工作区，无感模式自动建立 Cookie，账号模式显示登录页。
+共享 `CornAgentProvider` 不主动发起登录；嵌入方应先完成同源认证，再把返回的 `user_id` 用作 `principalKey`。
+身份变化时更新该键或重新挂载 Provider，避免保留上一用户的界面状态。
+
+内置 HTTP transport 使用 `credentials: 'same-origin'`，JSON、附件和 SSE 统一携带同源 Cookie；
+写请求携带 `X-CornAgent-Request: 1`。跨域接入需由宿主实现自己的认证 transport，修改 `principalKey` 本身不授予服务端权限。
+完整协议及身份适配接口见[用户系统](authentication.md)。
+
 ## 组件分工
 
 | 组件或接口 | 职责 |

@@ -13,6 +13,7 @@ CornAgent 由 React 前端、FastAPI 服务、PostgreSQL 和 Redis 组成。前�
 | `frontend/src/components/sidebar` | 首页、聊天历史、语言、主题与折叠导航 |
 | `frontend/src/i18n` | 有类型检查的中英文文案及状态提示翻译 |
 | `server/app/api/routes` | 会话、消息、运行、问题回答与文件 API |
+| `server/app/auth` | 可插拔身份解析、邮箱与 Passkey 鉴权、会话及挑战持久化 |
 | `server/app/agent` | 模型接入、运行编排、上下文压缩、工具执行与事件发布 |
 | `server/app/persistence` | 数据模型、事务、消息树、checkpoint 与租约 |
 | `server/app/object_store.py` | 私有本地文件系统与 S3 兼容存储 |
@@ -20,7 +21,7 @@ CornAgent 由 React 前端、FastAPI 服务、PostgreSQL 和 Redis 组成。前�
 
 ## 一次对话如何执行
 
-1. 前端提交消息和幂等键，服务端在同一事务创建消息与 Run。
+1. 应用层 `AuthGate` 先调用 `/auth/session` 确认身份；用户系统关闭时返回共享身份，开启时建立或校验登录 Cookie。之后前端提交消息和幂等键，服务端在同一事务创建消息与 Run。
 2. 运行器获取租约，读取会话上下文，调用模型并执行工具。
 3. 状态先提交 PostgreSQL，再将增量事件发布到 Redis Stream。
 4. 前端通过 SSE 更新回复、思考过程、工具结果与问题卡。
