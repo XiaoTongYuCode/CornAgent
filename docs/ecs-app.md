@@ -6,11 +6,12 @@ React 静态构建与 FastAPI / Agent 运行器在同一台 ECS 上运行，使�
 
 ## 演示站部署记录
 
-2026-09-09 已验证：[CornAgent](https://cornagent.xiaotongyu.com/chat) 在 ECS 运行版本 `adadc5f`，
-数据库迁移为 `0005_optional_users`。私有配置中启用 `CORNAGENT_USERS_ENABLED=true`、
+2026-09-09 已验证：[CornAgent](https://cornagent.xiaotongyu.com/chat) 在 ECS 运行版本 `674a9fd`，
+数据库迁移为 `0006_usage_events`。私有配置中启用 `CORNAGENT_USERS_ENABLED=true`、
 `CORNAGENT_AUTH_MODE=invisible`、`CORNAGENT_AUTH_ORIGIN=https://cornagent.xiaotongyu.com`，
 并使用 Secure Cookie；随机密钥仅保存在服务器私有配置中。项目模板仍默认关闭用户系统。
-真实对话、SSE、历史恢复及跨用户访问隔离已通过生产 HTTPS 接口验证，测试会话已删除；
+默认启用使用埋点，统计页面为 `/usage`，只展示当前身份的实际保留数据。
+真实对话、模型与工具埋点、SSE、历史恢复及跨用户访问隔离已通过生产 HTTPS 接口验证，测试会话已删除；
 本次部署经 ECS 公网域名验证页面与健康状态，本机浏览器复核受连接故障影响未完成。验证范围见[测试记录](verification.md)。
 
 ## 文件与服务
@@ -27,7 +28,7 @@ React 静态构建与 FastAPI / Agent 运行器在同一台 ECS 上运行，使�
 
 1. 在构建机运行 `make build`；将版本化源码及 `frontend/dist` 打包，不包含 `.env`、本机虚拟环境或运行数据。
 2. 解压到新发布目录，运行 `uv sync --locked --no-dev --python /opt/cornagent/python/bin/python3.12`。
-3. 链接私有 `.env`，停止旧应用后执行 `server/.venv/bin/python -m alembic upgrade head`。升级数据库前运行备份服务。
+3. 在发布目录根部链接私有 `.env`，停止旧应用后执行 `server/.venv/bin/python -m alembic upgrade head`。升级数据库前运行备份服务。
 4. 更新 `current` 链接并重启 `cornagent`；先检查本机 `/readyz`、静态页面和真实 Run。
 5. 首次迁移时，把 Cloudflare 中 `cornagent` 的记录改为 ECS 公网 IPv4，保持仅 DNS。加载 Caddy 配置，验证公开 HTTPS 证书、实际回复、SSE、历史恢复及删除。
 6. 确认新站可用后，将数据库限制为本机访问，使旧 Vercel 部署不能继续执行后台任务。保留 Vercel 项目不代表继续使用它服务该域名。
