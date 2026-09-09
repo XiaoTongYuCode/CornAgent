@@ -115,6 +115,32 @@ def test_invisible_scope_cookie_ip_and_forged_headers(auth_client):
         assert client.get("/api/v1/agent/sessions").status_code == 401
 
 
+@pytest.mark.parametrize("mode", ["invisible", "account"])
+def test_authenticated_sse_remains_private_and_uncompressed(auth_client, mode):
+    with auth_client(mode) as client:
+        if mode == "account":
+            code_login(client)
+        else:
+            assert client.post("/api/v1/auth/session").status_code == 200
+        started = start(client)
+        session_id, run_id = started["session"]["id"], started["run"]["id"]
+        detail = wait_run(client, session_id)
+        # Reconnecting after completion must restore the same persisted response.
+        response = client.get(f"/api/v1/agent/runs/{run_id}/stream")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert set(response.headers["cache-control"].split(", ")) == {"no-store", "no-transform"}
+        assert response.headers["x-accel-buffering"] == "no"
+        assert "Cookie" in response.headers["vary"]
+        snapshot = json.loads(
+            next(line[6:] for line in response.text.splitlines() if line.startswith("data: "))
+        )
+        assert snapshot["run"]["status"] == "completed"
+        assert snapshot["draft_markdown"] == detail["messages"][-1]["markdown"]
+        # Ordinary authenticated JSON can still be compressed by the proxy.
+        assert client.get("/api/v1/agent/sessions").headers["cache-control"] == "no-store"
+
+
 def test_account_password_logout_replay_and_isolation(auth_client):
     with auth_client() as client:
         alice, body = code_login(client)

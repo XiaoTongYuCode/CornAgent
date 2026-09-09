@@ -1,5 +1,6 @@
 cornagent.xiaotongyu.com {
-	encode zstd gzip
+	@compressible not path /api/v1/agent/runs/*/stream
+	encode @compressible zstd gzip
 	reverse_proxy 127.0.0.1:8000 {
 		flush_interval -1
 	}

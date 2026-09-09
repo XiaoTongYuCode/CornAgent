@@ -247,7 +247,13 @@ def create_app(
                 )
         response = await call_next(request)
         if settings.users_enabled and request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "no-store"
+            is_sse = (
+                response.headers.get("Content-Type", "").split(";", 1)[0] == "text/event-stream"
+            )
+            # Keep authenticated responses private without allowing SSE compression.
+            response.headers["Cache-Control"] = (
+                "no-store, no-transform" if is_sse else "no-store"
+            )
             response.headers["Vary"] = "Cookie"
         return response
 

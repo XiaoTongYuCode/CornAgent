@@ -35,6 +35,18 @@ Uvicorn 仅信任本机 Caddy 的代理头，不使用 Vercel 的 `forwarded-all
 
 默认包源不可达时，可先用 `uv export --locked --no-dev --no-emit-project` 导出 requirements，再用 `uv pip sync --require-hashes --python .venv/bin/python --index-url <镜像地址> <requirements文件>` 安装依赖后，再用 `uv pip install --no-deps --python .venv/bin/python --index-url <镜像地址> -e .` 安装当前项目（均在 `server/` 执行）；依赖版本与文件哈希仍由锁文件约束。远程执行器超时后应先检查并停止本次残留安装进程，避免重复安装等待同一依赖锁。
 
+## SSE 压缩边界与验证
+
+SSE 响应保留 `Cache-Control` 中的 `no-transform`；启用用户系统时使用
+`no-store, no-transform`，防止鉴权中间件覆盖禁压缩策略。Caddy 模板另外将
+`/api/v1/agent/runs/*/stream` 排除在 `encode` 之外，普通 JSON 和静态资源继续压缩。
+`flush_interval -1` 不能替代压缩边界。规则依据 [Caddy encode 文档](https://caddyserver.com/docs/caddyfile/directives/encode)。
+
+发布时同步更新应用与 Caddyfile，先执行 `caddy validate --config /etc/caddy/Caddyfile`，
+再 reload Caddy。使用浏览器默认 `Accept-Encoding` 发起真实长回复：SSE 应无
+`Content-Encoding`，连续 `delta` 应在 Run 完成前分散到达；同时检查断线重连快照、
+刷新后的完整历史及测试会话清理。仅检查 HTTP 200 或终态内容不能证明流式有效。
+
 ## 运维与回退
 
 演示站按部署方要求关闭 `cornagent`、`caddy`、`postgresql-17`、`cornagent-redis` 的开机自启及每日维护定时器；服务器重启后需手动运行 `systemctl start postgresql-17 cornagent-redis cornagent caddy`。Caddy 运行期间继续自动续签 HTTPS 证书。每次 schema 升级前的手动备份独立于每日定时任务。
