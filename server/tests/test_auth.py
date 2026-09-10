@@ -85,6 +85,7 @@ def test_default_disabled_has_no_cookie_and_no_account_api(client_factory):
 def test_invisible_scope_cookie_ip_and_forged_headers(auth_client):
     with auth_client("invisible") as client:
         assert client.get("/api/v1/agent/sessions").status_code == 401
+        assert client.get("/api/v1/agent/usage").status_code == 401
         bootstrap = client.post("/api/v1/auth/session")
         owner = bootstrap.json()["user_id"]
         token = client.cookies[DEVICE_COOKIE]

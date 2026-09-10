@@ -1,4 +1,4 @@
-"""Read-only, identity-scoped usage of retained root runs."""
+"""Read-only site-wide aggregates of retained runs and telemetry."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -24,7 +24,7 @@ def _tokens(usage: dict, key: str) -> int:
 
 @router.get("/usage")
 def usage_statistics(
-    request: Request, db: Db, identity: CurrentIdentity, days: int = Query(30, ge=7, le=90)
+    request: Request, db: Db, _identity: CurrentIdentity, days: int = Query(30, ge=7, le=90)
 ):
     if days not in (7, 30, 90):
         raise HTTPException(status_code=422, detail="days must be 7, 30 or 90")
@@ -56,8 +56,6 @@ def usage_statistics(
             AgentRun.provider_usage,
         )
         .where(
-            AgentRun.tenant_id == identity.tenant_id,
-            AgentRun.owner_membership_id == identity.membership_id,
             AgentRun.created_at >= start,
             AgentRun.created_at <= now,
         )
@@ -98,8 +96,6 @@ def usage_statistics(
         events = db.scalars(
             select(UsageEvent)
             .where(
-                UsageEvent.tenant_id == identity.tenant_id,
-                UsageEvent.owner_membership_id == identity.membership_id,
                 UsageEvent.created_at >= start,
                 UsageEvent.created_at <= now,
             )

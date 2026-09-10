@@ -1,4 +1,4 @@
-"""Usage isolation, aggregation, and nonblocking optional collection."""
+"""Site-wide usage aggregation, and nonblocking optional collection."""
 
 import threading
 import time
@@ -57,7 +57,7 @@ def seed(db, identity=LOCAL_SCOPE, *, ago=0, status="completed", tokens=None):
     return run
 
 
-def test_usage_range_scope_zero_fill_and_missing_usage(client_factory):
+def test_usage_site_wide_range_zero_fill_and_missing_usage(client_factory):
     with client_factory() as client:
         with client.app.state.database.session_factory() as db:
             seed(db, tokens={"prompt_tokens": 100, "completion_tokens": 20})
@@ -66,24 +66,33 @@ def test_usage_range_scope_zero_fill_and_missing_usage(client_factory):
             seed(db, Identity(membership_id="another-owner"), tokens={"prompt_tokens": 99999})
             seed(db, Identity(tenant_id="another-tenant"), tokens={"prompt_tokens": 99999})
         data = client.get("/api/v1/agent/usage?days=7").json()
-        assert data["totalRuns"] == 2
-        assert data["inputTokens"] == 100
-        assert data["reportedRuns"] == 1
-        assert data["successRate"] == 50
+        assert data["totalRuns"] == 4
+        assert data["inputTokens"] == 200098
+        assert data["reportedRuns"] == 3
+        assert data["successRate"] == 75
         assert data["averageDurationSeconds"] == 12
         assert len(data["daily"]) == 7
-        assert sum(day["runs"] for day in data["daily"]) == 2
-        assert sum(map(sum, data["hours"])) == 2
+        assert sum(day["runs"] for day in data["daily"]) == 4
+        assert sum(map(sum, data["hours"])) == 4
         assert not data["telemetryEnabled"]
-        assert client.get("/api/v1/agent/usage?days=90").json()["totalRuns"] == 3
+        assert client.get("/api/v1/agent/usage?days=90").json()["totalRuns"] == 5
         assert client.get("/api/v1/agent/usage?days=365").status_code == 422
         client.app.dependency_overrides[get_scope] = lambda: Identity(membership_id="empty")
+        other = client.get("/api/v1/agent/usage?days=7").json()
+        assert {k: v for k, v in other.items() if k != "to"} == {
+            k: v for k, v in data.items() if k != "to"
+        }
+        assert client.get("/api/v1/agent/sessions").json()["data"] == []
+
+
+def test_usage_empty(client_factory):
+    with client_factory() as client:
         empty = client.get("/api/v1/agent/usage").json()
         assert empty["totalRuns"] == 0 and empty["successRate"] is None
         assert empty["averageDurationSeconds"] is None
 
 
-def test_metrics_scope_retention_and_session_delete(client_factory, settings):
+def test_metrics_site_wide_retention_and_session_delete(client_factory, settings):
     settings.telemetry_enabled = True
     with client_factory() as client:
         with client.app.state.database.session_factory() as db:
@@ -115,11 +124,37 @@ def test_metrics_scope_retention_and_session_delete(client_factory, settings):
         assert data["models"][0]["childCalls"] == 1
         assert data["models"][0]["inputTokens"] == 10
         client.app.dependency_overrides[get_scope] = lambda: Identity(membership_id="empty")
-        assert client.get("/api/v1/agent/usage").json()["models"] == []
+        assert client.get("/api/v1/agent/usage").json()["models"] == data["models"]
         with client.app.state.database.session_factory() as db:
             db.execute(delete(AgentSession).where(AgentSession.id == run.session_id))
             db.commit()
             assert list(db.scalars(select(UsageEvent))) == []
+
+
+def test_events_aggregate_across_tenants_and_owners(client_factory, settings):
+    settings.telemetry_enabled = True
+    with client_factory() as client:
+        with client.app.state.database.session_factory() as db:
+            for identity in (
+                LOCAL_SCOPE,
+                Identity(membership_id="another-owner"),
+                Identity(tenant_id="another-tenant"),
+            ):
+                run = seed(db, identity)
+                for kind in ("model", "tool"):
+                    db.add(UsageEvent(**asdict(MetricEvent(
+                        run.tenant_id, run.owner_membership_id, run.session_id, run.id,
+                        kind, "test-" + kind, "root", "completed", 2, 10, 5,
+                    ))))
+                db.commit()
+        data = client.get("/api/v1/agent/usage").json()
+        for key in ("models", "tools"):
+            assert data[key][0]["calls"] == 3
+            assert data[key][0]["inputTokens"] == 30
+            assert data[key][0]["outputTokens"] == 15
+        serialized = str(data)
+        for private_field in ("tenant_id", "owner_membership_id", "session_id", "run_id"):
+            assert private_field not in serialized
 
 
 @pytest.mark.anyio
