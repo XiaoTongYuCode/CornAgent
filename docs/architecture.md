@@ -41,7 +41,7 @@ CornAgent 由 React 前端、FastAPI 服务、PostgreSQL 和 Redis 组成。前�
 
 持久化模型包含 Session、Message、Run、Question、File、MessageFile 和 SubagentTask。消息树支持重新生成与版本切换，文件通过有序引用关联到消息。
 
-内置 `ask_user`、`read_file`、Tavily `web_search`、Jina Reader `read_url` 及五个 Root 专用子任务编排工具。工具在 `server/app/agent/tools` 注册，由统一执行器处理调用与结果。`read_file` 只读取当前会话的 PDF，私有正文在模型请求期间物化，持久状态保存引用与脱敏结果。
+内置 `ask_user`、`read_file`、Tavily `web_search`、Tavily Extract `read_url` 及五个 Root 专用子任务编排工具。工具在 `server/app/agent/tools` 注册，由统一执行器处理调用与结果。`read_file` 只读取当前会话的 PDF，私有正文在模型请求期间物化，持久状态保存引用与脱敏结果。
 
 文件元数据和处理状态存入 PostgreSQL，原文件保存于私有本地目录或 S3 兼容桶。上传、完整性校验和回收策略见 [文件存储](storage.md)。
 

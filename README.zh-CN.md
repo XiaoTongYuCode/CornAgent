@@ -149,7 +149,7 @@ export default function App() {
 
 内置 `ask_user`、`read_file`、`web_search`、`read_url`，以及五个子任务编排工具。主 Agent 可以继续工作，再按需等待和收取子任务结果；子任务也有独立的持久化状态与取消机制。
 
-`web_search` 使用 Tavily（在 `.env` 配置 `tavily_api_key`），`read_url` 使用无需密钥的 Jina Reader，主 Agent 与子 Agent 均可使用。详见[网络工具](docs/web-tools.md)。
+`web_search` 使用 Tavily Search，`read_url` 使用 Tavily Extract，两者均需在 `.env` 配置 `tavily_api_key`，主 Agent 与子 Agent 均可使用。详见[网络工具](docs/web-tools.md)。
 
 可选的 `mock_web_search` 默认关闭，返回固定的虚构资料，用于演示搜索与任务编排，界面和模型提示均会标注“模拟”。主 Agent 和子 Agent 的推理仍使用你配置的模型接口。
 

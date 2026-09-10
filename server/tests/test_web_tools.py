@@ -71,19 +71,25 @@ def test_search_and_reader_for_child_with_bounded_content(web):
         httpx.Response(
             200,
             json={
-                "data": {
-                    "title": "Example",
-                    "content": "a" * 25000,
-                }
+                "results": [{"url": "https://example.com?a=b", "raw_content": "a" * 25000}],
+                "failed_results": [],
             },
         )
     )
     result = asyncio.run(executor.execute_tool("read_url", {"url": "https://example.com?a=b"}))
     assert result["truncated"] is True and len(result["content"]) == 24000
-    assert str(requests[1].url) == "https://r.jina.ai/"
-    assert json.loads(requests[1].content) == {"url": "https://example.com?a=b"}
-    assert "authorization" not in requests[1].headers
-    assert requests[1].headers["x-no-cache"] == "true"
+    assert result["title"] == ""
+    assert result["url"] == "https://example.com?a=b"
+    assert str(requests[1].url) == "https://api.tavily.com/extract"
+    assert json.loads(requests[1].content) == {
+        "urls": ["https://example.com?a=b"],
+        "extract_depth": "basic",
+        "format": "markdown",
+        "include_images": False,
+        "include_favicon": False,
+        "timeout": 30,
+    }
+    assert requests[1].headers["authorization"] == "Bearer test-secret"
     assert executor.catalog.for_scope("child").names() == ("web_search", "read_url")
 
 
@@ -116,10 +122,13 @@ def test_reader_rejects_nonpublic_targets(web, url):
         httpx.ReadTimeout("test-secret"),
     ],
 )
-def test_provider_errors_do_not_leak_upstream_data(web, response):
+@pytest.mark.parametrize(
+    "tool,args", [("web_search", {"query": "test"}), ("read_url", {"url": "https://example.com"})]
+)
+def test_provider_errors_do_not_leak_upstream_data(web, response, tool, args):
     executor, _, responses = web
     responses.append(response)
-    result = asyncio.run(executor.execute_tool("web_search", {"query": "test"}))
+    result = asyncio.run(executor.execute_tool(tool, args))
     assert result["ok"] is False
     assert "test-secret" not in json.dumps(result)
 
@@ -135,6 +144,8 @@ def test_missing_key_and_cancellation_do_not_call_provider(web):
     )
     result = asyncio.run(missing.execute_tool("web_search", {"query": "test"}))
     assert result["error"]["type"] == "WebSearchNotConfigured"
+    result = asyncio.run(missing.execute_tool("read_url", {"url": "https://example.com"}))
+    assert result["error"]["type"] == "WebReaderNotConfigured"
     cancelled = asyncio.Event()
     cancelled.set()
     with pytest.raises(asyncio.CancelledError):
@@ -146,3 +157,37 @@ def test_missing_key_and_cancellation_do_not_call_provider(web):
             )
         )
     assert requests == responses == []
+
+
+@pytest.mark.parametrize("scope", ["root", "child"])
+@pytest.mark.parametrize(
+    "payload,error_type",
+    [
+        (
+            {
+                "results": [],
+                "failed_results": [{"url": "https://example.com", "error": "test-secret"}],
+            },
+            "WebExtractionFailed",
+        ),
+        ({"results": [], "failed_results": []}, "WebExtractionFailed"),
+        ({"results": [{"raw_content": "  \n"}], "failed_results": []}, "WebExtractionFailed"),
+        ({"results": [{"raw_content": None}], "failed_results": []}, "WebProviderError"),
+        ({"results": [None], "failed_results": []}, "WebProviderError"),
+        ({"results": [], "failed_results": "test-secret"}, "WebProviderError"),
+        ({"results": [{"raw_content": "text"}]}, "WebProviderError"),
+    ],
+)
+def test_reader_rejects_failed_empty_and_invalid_extractions(web, scope, payload, error_type):
+    executor, _, responses = web
+    responses.append(httpx.Response(200, json=payload))
+    result = asyncio.run(
+        executor.execute_tool(
+            "read_url",
+            {"url": "https://example.com"},
+            context=ToolExecutionContext(execution_scope=scope),
+        )
+    )
+    assert result["ok"] is False
+    assert result["error"]["type"] == error_type
+    assert "test-secret" not in json.dumps(result)

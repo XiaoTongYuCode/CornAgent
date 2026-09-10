@@ -60,7 +60,7 @@ Child 可生成 `completed` 或 `needs_input`；运行时生成失败、取消�
 
 > 演示并行子任务。先由你调用 mock_web_search 搜索“电池方案”，再使用 spawn_subagents 同时派发三个 required=true 的任务：researcher 收集晨光模块化方案的优势；analyst 比较晨光与松林方案；verifier 核验接口风险和证据缺口。每个任务应调用 mock_web_search，并在结果中明确写出“模拟资料”。派发后你继续搜索成本缺口，调用 list_subagents 查看进度，然后 wait_subagents 等待，并 collect_subagent_results 收齐未交付结果，最后生成一份带证据和未知项的对比表。所有资料均为本地虚构示例，不要称为真实网络搜索。
 
-快捷等待模式可将派发要求改为 `delegate_tasks`。正式应用中的 Root 和 Child 都使用真实模型；默认网络工具使用真实 Tavily/Jina 数据，以上演示显式使用模拟资料。真实模型自行选择工具，因此确定性验收另使用测试模型。
+快捷等待模式可将派发要求改为 `delegate_tasks`。正式应用中的 Root 和 Child 都使用真实模型；默认网络工具使用真实 Tavily 数据，以上演示显式使用模拟资料。真实模型自行选择工具，因此确定性验收另使用测试模型。
 
 不依赖模型密钥的浏览器演示入口是 `tests.subagent_browser_app:browser_app`：显式注入两个测试模型，实际经过编排、工具执行、数据库、Redis 和前端渲染。先准备专用空测试 schema，将它写进 `CORNAGENT_DATABASE_URL` 的 `options=-csearch_path%3D<schema>`，运行迁移；然后从 `server` 启动：
 

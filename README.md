@@ -149,7 +149,7 @@ Usage analytics is available at `/usage`, with optional tool/model event collect
 
 Built-in tools include `ask_user`, `read_file`, `web_search`, `read_url`, and five subtask orchestration tools. The main agent can continue working, then wait for and collect subtask results as needed. Subtasks have their own durable state and cancellation mechanism.
 
-`web_search` uses Tavily (set `tavily_api_key` in `.env`); `read_url` uses keyless Jina Reader. Both are available to the main agent and subagents. See [web tools](docs/web-tools.md).
+`web_search` uses Tavily Search; `read_url` uses Tavily Extract. Both require `tavily_api_key` in `.env`. Both are available to the main agent and subagents. See [web tools](docs/web-tools.md).
 
 The optional `mock_web_search` is disabled by default and returns fixed, fictional material for demonstrating search and task orchestration. Both the interface and model prompts identify it as simulated. Reasoning by the main agent and subagents still uses your configured model API.
 
