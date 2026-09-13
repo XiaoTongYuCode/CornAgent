@@ -316,8 +316,7 @@ function LoginScreen({
         </section>
       </div>
       <footer className="auth-footer">
-        {publicHome(path) && <ProjectIntroduction locale={locale} />}
-        <p>{t('authSignupHint')}</p>
+        {publicHome(path) && <ProjectIntroduction locale={locale} showLinks={false} />}
         <nav aria-label={t('authFooter')}>
           <span>© {new Date().getFullYear()} CornAgent</span>
           <a href="https://github.com/XiaoTongYuCode/CornAgent" target="_blank" rel="noreferrer">GitHub</a>

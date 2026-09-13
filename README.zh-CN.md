@@ -4,8 +4,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cornagent-lockup-dark.svg" />
-    <img src="assets/brand/cornagent-lockup.svg" alt="CornAgent" width="360" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cornagent-inverse.svg" />
+    <img src="assets/brand/cornagent.svg" alt="CornAgent 图标" width="80" height="80" />
   </picture>
 </p>
 

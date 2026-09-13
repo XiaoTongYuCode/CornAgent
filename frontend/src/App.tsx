@@ -6,7 +6,6 @@ import { AgentSidebar } from './agent/AgentSidebar'
 import { CornAgentProvider } from './agent/CornAgentProvider'
 import { useAgent } from './agent/AgentContext'
 import { navigate, useMobileLayout, usePathname } from './app/navigation'
-import { ProjectContactLinks } from './app/ProjectContactLinks'
 import { ProjectIntroduction } from './app/ProjectIntroduction'
 import { DocumentMetadata } from './app/DocumentMetadata'
 import { ProfilePage } from './app/ProfilePage'
@@ -142,7 +141,7 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
         ) : null}
         <Activity mode={chat ? 'visible' : 'hidden'}>
           <AgentChatPage
-            emptyStateFooter={sessionId === null ? <><ProjectContactLinks /><ProjectIntroduction locale={locale} /></> : undefined}
+            emptyStateFooter={sessionId === null ? <ProjectIntroduction locale={locale} compact /> : undefined}
             sessionId={chat ? sessionId : workspace.session?.id ?? null}
             workspace={workspace}
             onSessionChange={changeSession}

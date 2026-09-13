@@ -3,6 +3,7 @@ export type Locale = 'zh-CN' | 'en'
 export const messages = {
   projectTitle: ['CornAgent · 开源全栈 AI Agent', 'CornAgent — Open-source Full-stack AI Agent'],
   projectDescription: ['基于 React 与 FastAPI 的可嵌入 AI Agent，支持自托管、流式交互、暂停与恢复、持久化运行状态和并行子任务。', 'An embeddable AI agent built with React and FastAPI. Self-host with streaming, pause and resume, durable state, and parallel multi-agent subtasks.'],
+  projectShortDescription: ['基于 React 与 FastAPI，轻松嵌入你的应用。', 'Built with React and FastAPI. Embed it in your app.'],
   projectLinks: ['项目资源', 'Project resources'],
   projectQuickStart: ['快速开始', 'Quick start'],
   projectIntegration: ['嵌入你的应用', 'Embed in your app'],
@@ -99,7 +100,6 @@ export const messages = {
   authPasskeyAdded: ['Passkey 已添加', 'Passkey added'],
   authLogout: ['退出登录', 'Sign out'],
   authFailed: ['操作未完成，请检查输入、连接或验证码有效期后重试。', 'Could not complete the request. Check your input, connection, or code expiry and retry.'],
-  authSignupHint: ['首次验证邮箱会自动创建账号。已有账号也可用验证码登录或重置密码。', 'Verifying your email creates an account on first use. Use a code to sign in or reset your password.'],
   pdfImageBudgetExceeded: ['PDF 图片超出模型输入预算。', 'PDF images exceed the model input budget.'],
   fileInputDisabled: ['文件输入已关闭。', 'File input is disabled.'],
   approvalUnavailable: ['此操作已不可用。', 'This operation is no longer available.'],

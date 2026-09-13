@@ -10,4 +10,12 @@
 .project-fallback .project-introduction { font-size: 16px; }
 .project-unavailable { width: min(716px, calc(100% - 32px)); margin: 24px auto; }
 .auth-footer .project-introduction { max-width: 640px; margin: 0 auto 20px; }
-.auth-footer .project-introduction nav { justify-content: center; }
+.agent-new-conversation:has(> .project-introduction--compact) { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.agent-new-conversation:has(> .project-introduction--compact) > .agent-new-conversation__title { margin-top: auto; }
+.agent-new-conversation > .project-introduction--compact { flex-shrink: 0; margin-top: auto; text-align: center; }
+.project-introduction--compact nav { justify-content: center; align-items: center; }
+.project-introduction .project-social-link { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; font-size: 16px; text-decoration: none; }
+.project-introduction .project-social-link:hover { background: var(--control-hover); }
+@media (max-width: 864px) {
+  .agent-new-conversation:has(> .project-introduction--compact) > .agent-new-conversation__title { margin-top: 0; }
+}
