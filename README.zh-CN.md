@@ -1,19 +1,19 @@
 <p align="center">
-  <a href="README.md" lang="en">English</a> · <strong lang="zh-CN">简体中文</strong>
-</p>
-
-<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cornagent-inverse.svg" />
     <img src="assets/brand/cornagent.svg" alt="CornAgent 图标" width="80" height="80" />
   </picture>
 </p>
 
-<h1 align="center">CornAgent — 开源全栈 AI Agent</h1>
+<h1 align="center">CornAgent</h1>
 
 <p align="center">
   <strong>为你的应用接入 AI Agent。</strong><br />
   可嵌入的 React 界面与 FastAPI Agent 运行时，支持自托管、流式交互、暂停与恢复、持久化运行状态和并行多 Agent 子任务。
+</p>
+
+<p align="center">
+  <a href="README.md" lang="en">English</a> · <strong lang="zh-CN">简体中文</strong>
 </p>
 
 <p align="center">
