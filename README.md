@@ -9,7 +9,8 @@
   </picture>
 </p>
 
-<h1 align="center">CornAgent — Open-source Full-stack AI Agent</h1>
+<h1 align="center">CornAgent</h1>
+<h2 align="center">Open-source Full-stack AI Agent</h2>
 
 <p align="center">
   <strong>Bring an AI agent into your application.</strong><br />
