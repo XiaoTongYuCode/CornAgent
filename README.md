@@ -1,20 +1,19 @@
 <p align="center">
-  <strong lang="en">English</strong> · <a href="README.zh-CN.md" lang="zh-CN">简体中文</a>
-</p>
-
-<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cornagent-inverse.svg" />
     <img src="assets/brand/cornagent.svg" alt="CornAgent icon" width="80" height="80" />
   </picture>
 </p>
 
-<h1 align="center">CornAgent</h1>
-<h2 align="center">Open-source Full-stack AI Agent</h2>
+<h1 align="center">CornAgent <br/> Open-source Full-stack AI Agent</h2>
 
 <p align="center">
   <strong>Bring an AI agent into your application.</strong><br />
   An embeddable React interface and FastAPI agent runtime. Self-host with streaming, pause and resume, durable state, and parallel multi-agent subtasks.
+</p>
+
+<p align="center">
+  <strong lang="en">English</strong> · <a href="README.zh-CN.md" lang="zh-CN">简体中文</a>
 </p>
 
 <p align="center">
