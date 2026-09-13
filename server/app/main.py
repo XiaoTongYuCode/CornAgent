@@ -327,6 +327,14 @@ def create_app(
             path = dist / request.url.path[1:]
             if not path.is_file():
                 raise HTTPException(status_code=404)
-            return FileResponse(path, headers={"Cache-Control": "no-cache"})
+            media_type = {
+                "/robots.txt": "text/plain",
+                "/sitemap.xml": "application/xml",
+                "/llms.txt": "text/plain",
+                "/favicon.svg": "image/svg+xml",
+            }[request.url.path]
+            return FileResponse(
+                path, media_type=media_type, headers={"Cache-Control": "no-cache"}
+            )
 
     return app

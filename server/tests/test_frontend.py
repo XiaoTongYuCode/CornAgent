@@ -20,8 +20,10 @@ def test_frontend_routes_support_direct_navigation_and_assets(settings, client_f
 
 
 def test_search_documents_and_private_pages_have_separate_responses(
-    settings, client_factory, tmp_path
+    settings, client_factory, tmp_path, monkeypatch
 ):
+    # OS MIME databases differ; discovery documents must use the same types everywhere.
+    monkeypatch.setattr("mimetypes.guess_type", lambda *_args, **_kwargs: ("text/xml", None))
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text('<title>CornAgent</title><h1>Open-source AI agent</h1>')
