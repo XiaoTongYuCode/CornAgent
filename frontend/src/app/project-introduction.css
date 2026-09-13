@@ -1,0 +1,13 @@
+.project-introduction { width: 100%; color: var(--muted, #646464); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.project-introduction h2 { margin: 0 0 6px; color: var(--text, #171918); font-size: 13px; font-weight: 500; line-height: 1.6; }
+.project-introduction p { margin: 0; }
+.project-introduction nav { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; }
+.project-introduction a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.project-introduction a:hover { color: var(--text, #171918); }
+.project-introduction a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 2px; }
+.project-fallback { max-width: 716px; height: 100dvh; overflow-y: auto; margin: auto; padding: 15vh 24px 32px; }
+.project-fallback .project-introduction h2 { font-size: 24px; }
+.project-fallback .project-introduction { font-size: 16px; }
+.project-unavailable { width: min(716px, calc(100% - 32px)); margin: 24px auto; }
+.auth-footer .project-introduction { max-width: 640px; margin: 0 auto 20px; }
+.auth-footer .project-introduction nav { justify-content: center; }

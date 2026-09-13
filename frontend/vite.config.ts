@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
+import { seoPlugin } from './seoPlugin'
+import { DEFAULT_SITE_URL } from './src/app/seo'
 
 // Read only on the Vite server; never expose this file through import.meta.env.
 const envPath = fileURLToPath(new URL('../.env', import.meta.url))
@@ -20,10 +22,15 @@ const proxyHost = ['0.0.0.0', '::'].includes(serverHost) ? '127.0.0.1' : serverH
 const proxyTarget = `http://${proxyHost.includes(':') ? `[${proxyHost}]` : proxyHost}:${port('SERVER_PORT', '8000')}`
 const frontendHost = setting('FRONTEND_HOST', '127.0.0.1')
 const frontendPort = port('FRONTEND_PORT', '5173')
+const publicSite = new URL(setting('PUBLIC_SITE_URL', DEFAULT_SITE_URL))
+if (!['http:', 'https:'].includes(publicSite.protocol) || publicSite.username || publicSite.password || publicSite.pathname !== '/' || publicSite.search || publicSite.hash) {
+  throw new Error('PUBLIC_SITE_URL must be an HTTP(S) origin without credentials, a path, query, or fragment')
+}
 
 export default defineConfig({
   envDir: false,
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), seoPlugin(publicSite.origin)],
+  define: { 'import.meta.env.VITE_PUBLIC_SITE_URL': JSON.stringify(publicSite.origin) },
   server: {
     host: frontendHost, port: frontendPort, strictPort: true,
     proxy: { '/api': { target: proxyTarget, changeOrigin: false } },

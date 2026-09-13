@@ -34,3 +34,17 @@ it('follows the system until manually selected and applies monochrome Ant Design
   act(() => { dark = true; listeners.forEach((listener) => listener()) })
   expect(screen.getByTestId('theme')).toHaveTextContent('light:#171717:#ffffff')
 })
+
+it('starts in the system dark theme and honors a saved light override on remount', async () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('prefers-color-scheme'), media: query,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
+  }))
+  const view = render(<AppProviders><ThemeProbe /></AppProviders>)
+  expect(screen.getByTestId('theme')).toHaveTextContent('dark:')
+  expect(localStorage.getItem('cornagent-theme')).toBeNull()
+  await userEvent.click(screen.getByRole('button', { name: '切换主题' }))
+  view.unmount()
+  render(<AppProviders><ThemeProbe /></AppProviders>)
+  expect(screen.getByTestId('theme')).toHaveTextContent('light:')
+})

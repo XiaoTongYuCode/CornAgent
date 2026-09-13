@@ -1,9 +1,13 @@
 import type { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { KeyRound, Mail, LockKeyhole } from 'lucide-react'
+import { KeyRound, Mail, LockKeyhole, Moon, Sun } from 'lucide-react'
 import cornAgentIcon from '../../../assets/brand/cornagent.svg'
 import { I18nProvider, useI18n } from '../i18n'
-import { navigate } from './navigation'
+import { navigate, usePathname } from './navigation'
+import { DocumentMetadata } from './DocumentMetadata'
+import { ProjectIntroduction } from './ProjectIntroduction'
+import { publicHome } from './seo'
+import { useThemePreference } from './useThemePreference'
 import './auth.css'
 
 type Session = { enabled: boolean; mode: 'invisible' | 'account' | null; user_id: string | null }
@@ -103,7 +107,9 @@ function LoginScreen({
   failed: boolean
   onLogin: () => Promise<void>
 }) {
-  const { t, toggleLocale } = useI18n()
+  const { t, toggleLocale, locale } = useI18n()
+  const path = usePathname()
+  const { theme, setPreference } = useThemePreference()
   const [method, setMethod] = useState<'code' | 'password'>('code')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -133,6 +139,7 @@ function LoginScreen({
   }
   return (
     <main className="auth-page">
+      <DocumentMetadata />
       <a className="auth-brand" href="/chat" aria-label="CornAgent">
         <img src={cornAgentIcon} alt="" />
         <span>CornAgent</span>
@@ -309,11 +316,15 @@ function LoginScreen({
         </section>
       </div>
       <footer className="auth-footer">
+        {publicHome(path) && <ProjectIntroduction locale={locale} />}
         <p>{t('authSignupHint')}</p>
         <nav aria-label={t('authFooter')}>
           <span>© {new Date().getFullYear()} CornAgent</span>
           <a href="https://github.com/XiaoTongYuCode/CornAgent" target="_blank" rel="noreferrer">GitHub</a>
           <button type="button" onClick={toggleLocale}>{t('authLanguage')}</button>
+          <button type="button" aria-label={t(theme === 'light' ? 'darkTheme' : 'lightTheme')} onClick={() => setPreference(theme === 'light' ? 'dark' : 'light')}>
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+          </button>
         </nav>
       </footer>
     </main>

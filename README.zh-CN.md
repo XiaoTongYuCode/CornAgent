@@ -9,9 +9,11 @@
   </picture>
 </p>
 
+<h1 align="center">CornAgent — 开源全栈 AI Agent</h1>
+
 <p align="center">
   <strong>为你的应用接入 AI Agent。</strong><br />
-  完整的 React 界面与 Python 执行后端，支持独立部署、嵌入式交互、工具扩展与运行恢复。
+  可嵌入的 React 界面与 FastAPI Agent 运行时，支持自托管、流式交互、暂停与恢复、持久化运行状态和并行多 Agent 子任务。
 </p>
 
 <p align="center">
@@ -44,7 +46,9 @@
 
 ## 为什么使用 CornAgent
 
-搭建 Agent 产品，除了模型调用，还需要处理会话、流式事件、工具执行、暂停、恢复和界面交互。CornAgent 将这些能力组织成一个可独立安装的 React + FastAPI 项目，聊天页与侧边栏共享同一套运行时。
+CornAgent 是开源全栈 AI Agent（Open-source Full-stack AI Agent）。你可以将它作为自托管 AI Agent 应用独立运行，也可以把 React Agent 侧边栏嵌入现有产品；FastAPI Agent 运行时负责工具调用、并行多 Agent 子任务和持久化执行状态。
+
+搭建 Agent 产品还需要处理会话、流式事件、暂停、恢复和界面交互。CornAgent 将这些能力组织成一个可独立安装的项目，聊天页与侧边栏共享同一套运行时。
 
 | 能力 | 已提供的行为 |
 | --- | --- |

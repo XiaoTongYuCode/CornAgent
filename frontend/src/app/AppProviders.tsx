@@ -4,9 +4,9 @@ import { App as AntdApp, ConfigProvider as AntdConfigProvider, theme as antdThem
 import enUS from 'antd/locale/en_US'
 import zhCN from 'antd/locale/zh_CN'
 import { motion } from 'motion/react'
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { useI18n } from '../i18n'
-import { readThemePreference, subscribeSystemTheme, systemTheme, type ThemeMode } from '../workspacePreferences'
+import { useThemePreference } from './useThemePreference'
 import { AppThemeContext, type AppThemeContextValue } from './AppThemeContext'
 
 const LobeConfigProvider = (
@@ -17,23 +17,7 @@ const LobeConfigProvider = (
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const { locale } = useI18n()
-  const [preference, setPreference] = useState<ThemeMode | null>(readThemePreference)
-  const osTheme = useSyncExternalStore(subscribeSystemTheme, systemTheme, () => 'light' as const)
-  const theme = preference ?? osTheme
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    document.documentElement.style.colorScheme = theme
-  }, [theme])
-
-  useEffect(() => {
-    if (preference === null) return
-    try {
-      if (typeof window.localStorage?.setItem === 'function') window.localStorage.setItem('cornagent-theme', preference)
-    } catch {
-      // Theme persistence is optional in restricted browser contexts.
-    }
-  }, [preference])
+  const { theme, setPreference } = useThemePreference()
 
   const themeConfig = useMemo<ThemeConfig>(() => ({
     algorithm: [
@@ -86,7 +70,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const context = useMemo<AppThemeContextValue>(() => ({
     theme,
     toggleTheme: () => setPreference(theme === 'light' ? 'dark' : 'light'),
-  }), [theme])
+  }), [theme, setPreference])
 
   return (
     <AppThemeContext.Provider value={context}>

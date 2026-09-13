@@ -10,7 +10,8 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "strict": true
+    "strict": true,
+    "jsx": "react-jsx"
   },
   "include": ["vite.config.ts", "eslint.config.js"]
 }

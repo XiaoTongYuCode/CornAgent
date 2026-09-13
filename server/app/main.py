@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -260,6 +260,8 @@ def create_app(
                     },
                 )
         response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["X-Robots-Tag"] = "noindex"
         if settings.users_enabled and request.url.path.startswith("/api/"):
             is_sse = (
                 response.headers.get("Content-Type", "").split(";", 1)[0] == "text/event-stream"
@@ -299,9 +301,32 @@ def create_app(
         @app.get("/chat")
         @app.get("/chat/{session_id}")
         @app.get("/usage")
+        @app.get("/profile")
         @app.get("/sidebar")
         @app.get("/rendering")
-        def spa(session_id: str | None = None):
-            return FileResponse(dist / "index.html", headers={"Cache-Control": "no-cache"})
+        def spa(request: Request, session_id: str | None = None):
+            home = request.url.path in {"/", "/chat"}
+            filename = "index.html" if home else (
+                "app.html" if session_id is not None else f"{request.url.path[1:]}.html"
+            )
+            page = dist / filename
+            # Retain compatibility with older frontend bundles.
+            if not page.is_file():
+                page = dist / "index.html"
+            headers = {"Cache-Control": "no-cache"}
+            if not home:
+                headers["X-Robots-Tag"] = "noindex"
+            return FileResponse(page, headers=headers)
+
+        @app.get("/robots.txt")
+        @app.get("/sitemap.xml")
+        @app.get("/llms.txt")
+        @app.get("/favicon.svg")
+        def public_document(request: Request):
+            # Serve only explicitly registered public assets, never arbitrary paths.
+            path = dist / request.url.path[1:]
+            if not path.is_file():
+                raise HTTPException(status_code=404)
+            return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
     return app

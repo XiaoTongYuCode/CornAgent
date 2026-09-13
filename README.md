@@ -9,9 +9,11 @@
   </picture>
 </p>
 
+<h1 align="center">CornAgent — Open-source Full-stack AI Agent</h1>
+
 <p align="center">
   <strong>Bring an AI agent into your application.</strong><br />
-  A complete React interface and Python runtime, with standalone deployment, embeddable UI, extensible tools, and execution recovery.
+  An embeddable React interface and FastAPI agent runtime. Self-host with streaming, pause and resume, durable state, and parallel multi-agent subtasks.
 </p>
 
 <p align="center">
@@ -44,7 +46,9 @@
 
 ## Why CornAgent?
 
-Building an agent product takes more than calling a model. It also requires sessions, streaming events, tool execution, pausing, recovery, and user interactions. CornAgent brings these capabilities together in a standalone React + FastAPI project, with a shared runtime for the chat page and sidebar.
+CornAgent is an open-source, full-stack AI agent. Use it as a self-hosted AI agent application, or embed its React agent sidebar into an existing product. The FastAPI agent runtime manages tool calls, parallel multi-agent subtasks, and persistent execution state.
+
+Building an agent product also requires sessions, streaming events, pausing, recovery, and user interactions. CornAgent brings these capabilities together in one independently installable project, with a shared runtime for the chat page and sidebar.
 
 | Capability | Included behavior |
 | --- | --- |

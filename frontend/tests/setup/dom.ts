@@ -25,6 +25,8 @@ function createMemoryStorage(): Storage {
 }
 
 beforeEach(() => {
+  // Existing UI fixtures use a Chinese system locale; preference tests override it explicitly.
+  vi.spyOn(window.navigator, 'languages', 'get').mockReturnValue(['zh-CN'])
   testLocalStorage = createMemoryStorage()
   vi.stubGlobal('localStorage', testLocalStorage)
   Object.defineProperty(window, 'localStorage', { configurable: true, value: testLocalStorage })

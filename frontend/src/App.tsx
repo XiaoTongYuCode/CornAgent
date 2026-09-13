@@ -7,6 +7,8 @@ import { CornAgentProvider } from './agent/CornAgentProvider'
 import { useAgent } from './agent/AgentContext'
 import { navigate, useMobileLayout, usePathname } from './app/navigation'
 import { ProjectContactLinks } from './app/ProjectContactLinks'
+import { ProjectIntroduction } from './app/ProjectIntroduction'
+import { DocumentMetadata } from './app/DocumentMetadata'
 import { ProfilePage } from './app/ProfilePage'
 import { SidebarExamplePage } from './app/SidebarExamplePage'
 import { Sidebar } from './components/Sidebar'
@@ -24,7 +26,7 @@ function initialCollapsed() {
   }
 }
 function Application({ path, sessionId, accountControls }: { path: string; sessionId: string | null; accountControls?: ReactNode }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const mobile = useMobileLayout()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -61,6 +63,7 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
       className={`app-shell cornagent-shell${collapsed ? ' sidebar-collapsed' : ''}`}
       data-mobile-sidebar-open={mobile && mobileOpen}
     >
+      <DocumentMetadata />
       <button
         ref={mobileToggleRef}
         type="button"
@@ -139,12 +142,15 @@ function Application({ path, sessionId, accountControls }: { path: string; sessi
         ) : null}
         <Activity mode={chat ? 'visible' : 'hidden'}>
           <AgentChatPage
-            emptyStateFooter={sessionId === null ? <ProjectContactLinks /> : undefined}
+            emptyStateFooter={sessionId === null ? <><ProjectContactLinks /><ProjectIntroduction locale={locale} /></> : undefined}
             sessionId={chat ? sessionId : workspace.session?.id ?? null}
             workspace={workspace}
             onSessionChange={changeSession}
           />
         </Activity>
+        {chat && sessionId === null && workspace.available === false && (
+          <div className="project-unavailable"><ProjectIntroduction locale={locale} /></div>
+        )}
       </main>
       {example && <AgentSidebar layout="docked" />}
     </div>
