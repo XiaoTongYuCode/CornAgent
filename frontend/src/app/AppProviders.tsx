@@ -1,4 +1,4 @@
-import * as LobeConfigProviderModule from '@lobehub/ui/es/ConfigProvider/index'
+import LobeConfigProvider from '@lobehub/ui/es/ConfigProvider/index'
 import LobeThemeProvider from '@lobehub/ui/es/ThemeProvider/index'
 import { App as AntdApp, ConfigProvider as AntdConfigProvider, theme as antdTheme, type ThemeConfig } from 'antd'
 import enUS from 'antd/locale/en_US'
@@ -8,12 +8,6 @@ import { useMemo, type ReactNode } from 'react'
 import { useI18n } from '../i18n'
 import { useThemePreference } from './useThemePreference'
 import { AppThemeContext, type AppThemeContextValue } from './AppThemeContext'
-
-const LobeConfigProvider = (
-  LobeConfigProviderModule as typeof LobeConfigProviderModule & {
-    default: typeof LobeConfigProviderModule.ConfigProvider
-  }
-).default
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const { locale } = useI18n()

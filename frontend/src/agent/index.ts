@@ -1,5 +1,5 @@
 export { CornAgentProvider, type CornAgentProviderProps } from './CornAgentProvider'
-export { AgentSidebar, type AgentSidebarProps } from './AgentSidebar'
+export { AgentSidebar, type AgentSidebarProps, type AgentSidebarRenderContext, type AgentSidebarSlot } from './AgentSidebar'
 export { AgentLauncher } from './AgentLauncher'
 export { useAgent } from './AgentContext'
 export { AgentChatPage } from './AgentChatPage'

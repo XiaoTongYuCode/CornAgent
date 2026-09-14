@@ -50,3 +50,41 @@ it('shares a workspace between the launcher and overlay without reloading it on 
   await user.click(screen.getByRole('button', { name: 'Close agent' }))
   await waitFor(() => expect(document.querySelector('.agent-drawer')).toBeNull())
 })
+
+it('retains the resized panel width when closing and reopening', async () => {
+  const user = userEvent.setup()
+  const transport = {
+    kind: 'cornagent-http',
+    get: vi.fn(async (path: string) =>
+      path === '/agent/status'
+        ? { available: false, file_input: { enabled: false, accepts: [], max_count: 0, max_total_bytes: 0 } }
+        : { data: [], next_cursor: null },
+    ),
+    mutate: vi.fn(),
+    openEventStream: vi.fn(),
+  } as unknown as CornAgentApiTransport
+
+  render(
+    <CornAgentProvider transport={transport} sessionId={null}>
+      <div className="app-shell cornagent-shell">
+        <AgentLauncher />
+        <AgentSidebar layout="docked" />
+      </div>
+    </CornAgentProvider>,
+  )
+
+  await user.click(screen.getByRole('button', { name: '询问AI' }))
+  const panel = document.querySelector('.agent-drawer')
+  await waitFor(() => expect(panel).toHaveAttribute('data-open', 'true'))
+  const resizeHandle = screen.getByRole('separator', { name: '调整 Agent 侧边栏宽度' })
+  resizeHandle.focus()
+  await user.keyboard('{ArrowLeft}')
+  expect(resizeHandle).toHaveAttribute('aria-valuenow', '416')
+
+  await user.click(screen.getByRole('button', { name: '关闭 Agent' }))
+  await waitFor(() => expect(panel).toHaveAttribute('data-open', 'false'))
+  expect(panel).toBeInTheDocument()
+  await waitFor(() => expect(document.querySelector('.agent-drawer')).toBeNull())
+  await user.click(screen.getByRole('button', { name: '询问AI' }))
+  await waitFor(() => expect(screen.getByRole('separator', { name: '调整 Agent 侧边栏宽度' })).toHaveAttribute('aria-valuenow', '416'))
+})

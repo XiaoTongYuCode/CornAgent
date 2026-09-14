@@ -1,6 +1,5 @@
-.cornagent-shell { --app-header-height: 50px; --nav-item-height: 32px; --sidebar-width: 238px; --sidebar-layout-width: var(--sidebar-width); height: 100%; display: grid; grid-template-columns: var(--sidebar-layout-width) minmax(0, 1fr); background: var(--bg); color: var(--text); }
-.cornagent-shell.sidebar-collapsed { --sidebar-layout-width: 0px; }
-.cornagent-shell:has(> .agent-drawer[data-layout-open="true"]) { grid-template-columns: var(--sidebar-layout-width) minmax(0, 1fr) auto; }
+.cornagent-shell { --app-header-height: 50px; --nav-item-height: 32px; --sidebar-width: 238px; height: 100%; display: flex; overflow: clip; background: var(--bg); color: var(--text); }
+.cornagent-shell > .sidebar { flex-shrink: 0; }
 .sidebar-header { position: relative; display: flex; align-items: center; flex: 0 0 var(--app-header-height); min-height: var(--app-header-height); padding: 0 100px 0 12px; border-bottom: 1px solid var(--border); }
 .sidebar-brand { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text); }
 .sidebar-brand-icon { width: 24px; height: 24px; flex: 0 0 24px; background: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; }
@@ -23,7 +22,7 @@
 .nav-section-content[hidden] { display: none; }
 .mobile-navigation-toggle, .mobile-sidebar-backdrop { display: none; }
 .sidebar-collapsed .cornagent-main > .agent-chat-page > .topbar, .sidebar-collapsed .cornagent-main > .topbar { padding-left: 52px; }
-.cornagent-main { min-width: 0; min-height: 0; height: 100%; overflow: auto; }
+.cornagent-main { flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: auto; }
 .topbar { height: var(--app-header-height); padding: 0 24px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--border); background: var(--topbar); }
 .topbar strong { font-size: 14px; font-weight: 500; }
 .cornagent-example { max-width: 800px; margin: 100px auto; padding: 0 clamp(20px, 4vw, 48px); }
@@ -33,7 +32,6 @@
 .form-error { color: #db4545; padding-top: 12px; }
 
 @media (max-width: 864px) {
-  .cornagent-shell, .cornagent-shell:has(> .agent-drawer[data-layout-open="true"]) { grid-template-columns: minmax(0, 1fr); }
   .cornagent-shell > .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 510; max-width: calc(100vw - 48px); transform: translateX(-100%); visibility: hidden; pointer-events: none; }
   .cornagent-shell[data-mobile-sidebar-open="true"] > .sidebar { transform: translateX(0); visibility: visible; pointer-events: auto; box-shadow: 12px 0 40px #0002; }
   .sidebar-resize-handle, .desktop-sidebar-collapse { display: none; }

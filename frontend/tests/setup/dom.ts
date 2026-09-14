@@ -100,3 +100,9 @@ Object.defineProperty(globalThis, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 })
+
+Object.defineProperty(window.CSS, 'supports', {
+  configurable: true,
+  writable: true,
+  value: () => false,
+})

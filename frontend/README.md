@@ -61,6 +61,8 @@ npm run build
 
 公共接入入口为 `src/agent/index.ts`，提供 `CornAgentProvider`、`AgentLauncher`、`AgentSidebar` 与 `useAgent`。最小示例、API 配置和组件职责见 [前端接入](../docs/frontend-integration.md)。
 
+`AgentSidebar` 的标题、图标、头部与操作区渲染、页脚、空态附加内容、宽度和分区样式可通过公共参数定制。所有参数可选，默认覆盖式用法保持兼容；并排模式让页面和侧栏处于同一个 Flex 容器。定制仅影响展示，继续使用同一 Provider 和会话工作区，详见[侧栏定制](../docs/frontend-integration.md#侧栏定制)。
+
 ## 多语言开发
 
 消息操作、提问提交与附件上传的错误统一由 `api/transport.ts` 按业务码、HTTP 状态和网络异常映射至有类型的 i18n 字典。

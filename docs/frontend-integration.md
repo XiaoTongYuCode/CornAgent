@@ -38,6 +38,81 @@ function MyButton() {
 
 把自定义按钮放在 `CornAgentProvider` 内。同一 Provider 下的按钮、聊天页和侧栏共享会话；不需要额外创建 gateway 或 SSE 订阅。
 
+## 侧栏定制
+
+所有定制参数均为可选，原来的 `<AgentSidebar />` 保持默认外观和覆盖式布局。标题、图标及业务内容由宿主传入，不需要修改组件源码：
+
+```tsx
+<AgentSidebar
+  title="业务助手"
+  defaultWidth={440}
+  minWidth={320}
+  maxWidth={800}
+  widthStorageKey="my-app:assistant-width"
+  className="my-assistant"
+  styles={{ header: { height: 56 }, footer: { padding: 12 } }}
+  footer={<small>回复仅供参考</small>}
+  renderActions={({ actions }) => <>{actions.newChat}{actions.close}</>}
+/>
+```
+
+| 参数 | 默认值 | 用途 |
+| --- | --- | --- |
+| `title`、`icon` | `CornAgent`、无 | React 节点；可传品牌名称、Logo 或自定义标题内容 |
+| `ariaLabel` | 纯文本标题，否则 `CornAgent` | 面板的无障碍名称；复杂标题建议显式设置 |
+| `userName` | 无 | 空白会话问候中的用户名 |
+| `renderHeader` | 内置头部 | 自定义头部内容；返回 `null` 隐藏整个头部 |
+| `renderActions` | 新对话、历史、关闭 | 替换、重排或追加头部操作；返回 `null` 隐藏操作区 |
+| `footer` | 无 | 固定在聊天区域下方的 React 节点 |
+| `emptyStateFooter` | 无 | 仅空白会话时，显示在输入框下方的 React 节点 |
+| `className`、`style` | 无 | 面板根节点样式；宽度通过专用参数控制，避免与退场动画冲突 |
+| `classNames`、`styles` | 无 | 分别设置 `header`、`body`、`footer` 分区的类名和样式，无需依赖内部选择器 |
+| `layout` | `overlay` | `overlay` 覆盖页面；`docked` 在宿主横向布局中与页面并排 |
+| `defaultWidth` | `400` | 非受控初始宽度，单位 CSS px；已保存的宽度优先 |
+| `width`、`onWidthChange` | 无 | 受控宽度及拖拽/键盘调整回调；宿主通过回调更新 `width` |
+| `minWidth`、`maxWidth` | `400`、`720` | 宽度边界，最终受视口宽度限制；窄屏仍自动全屏覆盖 |
+| `resizable` | `true` | 是否显示并启用拖拽/键盘调整手柄 |
+| `widthStorageKey` | `cornagent:agent-panel-width` | 非受控宽度偏好的存储键，初始化时读取；`null` 禁用持久化。受控模式不读写宽度偏好 |
+
+`renderHeader` / `renderActions` 接收导出的 `AgentSidebarRenderContext`：
+
+- `defaultContent`：该区域的默认内容，便于追加业务按钮而保留内置功能。
+- `actions.newChat` / `actions.history` / `actions.close`：可直接组合的内置操作，保留禁用状态和原有交互。
+- `close()`：使用侧栏退场动画关闭；自定义关闭按钮调用此方法。
+- `workspace`：当前共享工作区；`busy` 表示新建/切换会话暂不可用。自定义写操作应沿用该禁用状态。
+
+回调仅渲染内容，不创建新工作区。复杂的自定义组件可定义在回调外，再通过 JSX 传入。宿主文案由宿主负责国际化，组件不会翻译传入的 React 节点。隐藏头部或关闭按钮时，宿主应保留可访问的关闭入口。
+
+受控宽度用法：
+
+```tsx
+import { useState } from 'react'
+import { AgentSidebar } from './agent'
+
+function MySidebar() {
+  const [width, setWidth] = useState(440)
+  return <AgentSidebar title="业务助手" width={width} onWidthChange={setWidth} />
+}
+```
+
+### 与业务页面平级
+
+并排模式让页面和侧栏成为同一个 Flex 容器的子元素，打开和关闭时同步调整占用空间：
+
+```tsx
+<CornAgentProvider>
+  <div style={{ display: 'flex', height: '100dvh', overflow: 'clip' }}>
+    <main style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+      <AgentLauncher />
+      {/* 业务页面 */}
+    </main>
+    <AgentSidebar layout="docked" title="业务助手" />
+  </div>
+</CornAgentProvider>
+```
+
+`docked` 的宽度由侧栏自身管理，宿主无需计时、预留固定网格列或修改侧栏的父节点。已有默认覆盖式接入无需迁移；自行覆盖旧网格布局或内部样式的接入方应使用上述 Flex 布局及公开样式参数。
+
 ## 配置
 
 | Provider 参数 | 默认值 | 用途 |

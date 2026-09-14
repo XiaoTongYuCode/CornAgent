@@ -150,7 +150,7 @@ function LoginScreen({
           {!ready ? (
             <>
               <p className="auth-description" role="status">{t(failed ? 'authFailed' : 'authLoading')}</p>
-              {failed && <button className="auth-primary" onClick={() => { void onLogin() }}>{t('authRetry')}</button>}
+              {failed && <button className="auth-primary auth-retry" onClick={() => { void onLogin() }}>{t('authRetry')}</button>}
             </>
           ) : (
             <>
@@ -316,7 +316,7 @@ function LoginScreen({
         </section>
       </div>
       <footer className="auth-footer">
-        {publicHome(path) && <ProjectIntroduction locale={locale} showLinks={false} />}
+        {publicHome(path) && <ProjectIntroduction locale={locale} showLinks={false} brief />}
         <nav aria-label={t('authFooter')}>
           <span>© {new Date().getFullYear()} CornAgent</span>
           <a href="https://github.com/XiaoTongYuCode/CornAgent" target="_blank" rel="noreferrer">GitHub</a>

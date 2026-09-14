@@ -14,6 +14,8 @@ it('does not mount a workspace until the server establishes an identity', async 
   expect(screen.queryByText(/workspace:/)).not.toBeInTheDocument()
   await screen.findByRole('heading', { name: '登录' })
   expect(screen.getByLabelText('邮箱')).toHaveAttribute('type', 'email')
+  expect(screen.getByText('基于 React 与 FastAPI，轻松嵌入你的应用。')).toBeInTheDocument()
+  expect(screen.queryByText(/支持自托管/)).not.toBeInTheDocument()
   expect(screen.queryByText(/workspace:/)).not.toBeInTheDocument()
 })
 it('preserves the default shared workspace without account controls', async () => {
@@ -65,7 +67,7 @@ it('clears private content after logout even if the session refresh fails', asyn
     ? Promise.resolve(response({ ok: true })) : Promise.reject(new TypeError('offline')))
   fireEvent.click(screen.getByRole('button', { name: '退出登录' }))
   await waitFor(() => expect(screen.queryByText('workspace:alice')).not.toBeInTheDocument())
-  await screen.findByRole('button', { name: '重试' })
+  expect(await screen.findByRole('button', { name: '重试' })).toHaveClass('auth-retry')
 })
 
 it('continues through email verification and resends without losing the email', async () => {

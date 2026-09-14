@@ -1,15 +1,13 @@
 import { useAgent } from './AgentContext'
 import { AgentPanel } from './AgentPanel'
+import type { AgentSidebarProps } from './AgentSidebar.types'
 
-export interface AgentSidebarProps {
-  layout?: 'overlay' | 'docked'
-  userName?: string
-}
+export type { AgentSidebarProps, AgentSidebarRenderContext, AgentSidebarSlot } from './AgentSidebar.types'
 
 /** A ready-to-use panel driven by the nearest CornAgentProvider. */
-export function AgentSidebar({ layout = 'overlay', userName }: AgentSidebarProps) {
+export function AgentSidebar({ layout = 'overlay', ...props }: AgentSidebarProps) {
   const workspace = useAgent()
   return workspace.open ? (
-    <AgentPanel workspace={workspace} userName={userName} layout={layout} />
+    <AgentPanel {...props} workspace={workspace} layout={layout} />
   ) : null
 }

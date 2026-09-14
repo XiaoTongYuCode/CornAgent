@@ -274,11 +274,15 @@
 }
 .auth-brand {
   gap: 7px;
-  color: #171918;
+  color: var(--text);
   text-decoration: none;
   font-size: 23px;
   font-weight: 600;
   letter-spacing: -0.8px;
+}
+.auth-retry {
+  display: block;
+  margin-inline: auto;
 }
 .auth-card {
   position: relative;

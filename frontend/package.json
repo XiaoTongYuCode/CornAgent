@@ -14,7 +14,7 @@
     "@ant-design/icons": "6.3.2",
     "@base-ui/react": "^1.8.0",
     "@fontsource/inter": "^5.2.8",
-    "@lobehub/ui": "^5.15.7",
+    "@lobehub/ui": "^5.33.2",
     "@number-flow/react": "^0.6.2",
     "@simplewebauthn/browser": "^13.3.0",
     "@visx/curve": "^4.0.1-alpha.0",

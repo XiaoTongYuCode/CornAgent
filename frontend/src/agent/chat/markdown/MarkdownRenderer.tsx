@@ -37,6 +37,8 @@ export function MarkdownRenderer({ fontSize, onLinkClick, streaming = false, val
   return <Markdown
     animated={streaming}
     components={components}
+    enableImageGallery
+    enableMermaid
     enableStream={streaming}
     fontSize={fontSize}
     streamSmoothingPreset="realtime"
