@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<h1 align="center">CornAgent <br/> Open-source Full-stack AI Agent</h2>
+<h1 align="center">CornAgent</h1>
 
 <p align="center">
   <strong>Bring an AI agent into your application.</strong><br />
