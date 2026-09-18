@@ -35,8 +35,12 @@ def test_search_documents_and_private_pages_have_separate_responses(
         "sitemap.xml": ("application/xml", '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>'),
         "llms.txt": ("text/plain", "# CornAgent\n"),
         "favicon.svg": ("image/svg+xml", '<svg xmlns="http://www.w3.org/2000/svg"/>'),
+        ".well-known/aiagentslisting-verify.txt": (
+            "text/plain", "6b9fe50fb649b08fbc102eb3ee2532ae"
+        ),
     }
     for filename, (_, content) in documents.items():
+        (dist / filename).parent.mkdir(parents=True, exist_ok=True)
         (dist / filename).write_text(content)
     (dist / "private.txt").write_text("never served")
     settings.frontend_dist = dist

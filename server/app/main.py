@@ -328,6 +328,7 @@ def create_app(
         @app.get("/sitemap.xml")
         @app.get("/llms.txt")
         @app.get("/favicon.svg")
+        @app.get("/.well-known/aiagentslisting-verify.txt")
         def public_document(request: Request):
             # Serve only explicitly registered public assets, never arbitrary paths.
             path = dist / request.url.path[1:]
@@ -338,6 +339,7 @@ def create_app(
                 "/sitemap.xml": "application/xml",
                 "/llms.txt": "text/plain",
                 "/favicon.svg": "image/svg+xml",
+                "/.well-known/aiagentslisting-verify.txt": "text/plain",
             }[request.url.path]
             return FileResponse(
                 path, media_type=media_type, headers={"Cache-Control": "no-cache"}
