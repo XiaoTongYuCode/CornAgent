@@ -19,7 +19,15 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentIdentity, Db
 from app.api.routes._common import IdempotencyKey, require_idempotency_key
-from app.file_extraction import extract_pdf
+from app.document_formats import (
+    DOCUMENT_TYPES,
+    DOCX,
+    TEXT_TYPES,
+    FileMimeType,
+    decode_text,
+    docx_xml,
+)
+from app.file_extraction import extract_document, extract_pdf
 from app.persistence.errors import DomainError
 from app.persistence.models import FileResource, utcnow
 
@@ -53,7 +61,7 @@ class FileCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     purpose: Literal["session_attachment"]
     filename: str = Field(min_length=1, max_length=255)
-    mime_type: Literal["image/png", "image/jpeg", "image/webp", "application/pdf"]
+    mime_type: FileMimeType
     size_bytes: int = Field(gt=0)
 
 
@@ -103,7 +111,7 @@ def create_file(
         )
     limit = (
         settings.agent_file_pdf_max_bytes
-        if payload.mime_type == "application/pdf"
+        if payload.mime_type in DOCUMENT_TYPES
         else settings.agent_file_image_max_bytes
     )
     if payload.size_bytes > limit:
@@ -157,7 +165,7 @@ async def upload_content(file_id: str, request: Request, identity: CurrentIdenti
         settings = request.app.state.settings
         return (
             settings.agent_file_pdf_max_bytes
-            if item.mime_type == "application/pdf"
+            if item.mime_type in DOCUMENT_TYPES
             else settings.agent_file_image_max_bytes
         )
 
@@ -216,6 +224,10 @@ def _store_upload(file_id, payload, request, identity, db):
         if item.mime_type == "application/pdf":
             if not payload.startswith(b"%PDF-"):
                 raise ValueError("Invalid PDF signature")
+        elif item.mime_type in TEXT_TYPES:
+            decode_text(payload)
+        elif item.mime_type == DOCX:
+            docx_xml(payload)
         else:
             with warnings.catch_warnings():
                 warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -254,9 +266,9 @@ def _store_upload(file_id, payload, request, identity, db):
 async def extract_file(file_id: str, request: Request, identity: CurrentIdentity):
     def authorize(db):
         item = owned_file(db, identity, file_id)
-        if item.mime_type != "application/pdf" or item.state not in {"stored", "ready"}:
+        if item.mime_type not in DOCUMENT_TYPES or item.state not in {"stored", "ready"}:
             raise DomainError(
-                "file_not_extractable", "Upload a PDF before extracting it.", status_code=409
+                "file_not_extractable", "Upload a document before extracting it.", status_code=409
             )
         return file_out(item), item.storage_key, item.sha256
 
@@ -274,9 +286,15 @@ async def extract_file(file_id: str, request: Request, identity: CurrentIdentity
         settings = request.app.state.settings
         result, failure = None, None
         try:
+            parser = extract_pdf if target["mime_type"] == "application/pdf" else extract_document
             result = await run_in_threadpool(
-                extract_pdf,
+                parser,
                 payload,
+                **(
+                    {}
+                    if target["mime_type"] == "application/pdf"
+                    else {"mime_type": target["mime_type"]}
+                ),
                 max_pages=settings.agent_file_pdf_max_pages,
                 max_chars=settings.agent_file_extracted_max_chars,
                 timeout_seconds=settings.agent_file_extraction_timeout_seconds,
@@ -318,7 +336,9 @@ def _finish_extraction(db, identity, file_id, digest, result, failure):
 
 
 @router.get("/{file_id}/content")
-def get_content(file_id: str, request: Request, identity: CurrentIdentity, db: Db):
+def get_content(
+    file_id: str, request: Request, identity: CurrentIdentity, db: Db, download: bool = False
+):
     item = owned_file(db, identity, file_id)
     if item.state not in {"stored", "ready"}:
         raise DomainError("file_content_unavailable", "File content is not ready.", status_code=404)
@@ -335,7 +355,10 @@ def get_content(file_id: str, request: Request, identity: CurrentIdentity, db: D
         headers={
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "no-store",
-            "Content-Disposition": f"inline; filename*=UTF-8''{quote(item.filename, safe='')}",
+            "Content-Disposition": (
+                f"{'attachment' if download else 'inline'}; "
+                f"filename*=UTF-8''{quote(item.filename, safe='')}"
+            ),
         },
     )
 

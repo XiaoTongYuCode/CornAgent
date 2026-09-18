@@ -82,6 +82,24 @@ class AgentModelClient(Protocol):
     ) -> Mapping[str, Any] | str: ...
 
 
+def supports_tool_loading(model: AgentModelClient) -> bool:
+    """Older injected adapters keep their existing, fully mounted tool contract."""
+
+    return callable(getattr(model, "stream_with_tools", None))
+
+
+def stream_model(
+    model: AgentModelClient,
+    messages: list[dict[str, Any]],
+    *,
+    tools: Sequence[Mapping[str, Any]],
+) -> AsyncIterator[ModelStreamEvent]:
+    stream_with_tools = getattr(model, "stream_with_tools", None)
+    if callable(stream_with_tools):
+        return stream_with_tools(messages, tools=tools)
+    return model.stream(messages)
+
+
 def _mapping(value: object) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
@@ -146,6 +164,7 @@ class LiteLLMAgentModel:
         fallback_api_base: str | None = None,
         fallback_supports_images: bool = False,
         observer: Callable[[str], None] | None = None,
+        output_max_tokens: int = 16_384,
     ) -> None:
         self.primary = _ProviderEndpoint(
             provider="deepseek"
@@ -174,8 +193,15 @@ class LiteLLMAgentModel:
         self.retry_base_delay_seconds = max(0.0, retry_base_delay_seconds)
         self.retry_max_delay_seconds = max(self.retry_base_delay_seconds, retry_max_delay_seconds)
         self.observer = observer
+        self.output_max_tokens = output_max_tokens
 
     async def stream(self, messages: list[dict[str, Any]]) -> AsyncIterator[ModelStreamEvent]:
+        async for event in self.stream_with_tools(messages, tools=self.tools):
+            yield event
+
+    async def stream_with_tools(
+        self, messages: list[dict[str, Any]], *, tools: Sequence[Mapping[str, Any]]
+    ) -> AsyncIterator[ModelStreamEvent]:
         endpoint = self.primary
         has_images = self._has_image_input(messages)
         fallback_used = False
@@ -188,7 +214,7 @@ class LiteLLMAgentModel:
                     **self._request(
                         endpoint,
                         messages=messages,
-                        tools=self._tools_for(endpoint),
+                        tools=self._tools_for(endpoint, tools),
                         stream=True,
                         system_prompt=self.system_prompt,
                     ),
@@ -386,15 +412,17 @@ class LiteLLMAgentModel:
         if tools:
             request["tools"] = tools
             request["tool_choice"] = "auto"
-        if max_tokens is not None:
-            request["max_tokens"] = max_tokens
+        request["max_tokens"] = max_tokens if max_tokens is not None else self.output_max_tokens
         return request
 
-    def _tools_for(self, endpoint: _ProviderEndpoint) -> list[dict[str, Any]]:
+    def _tools_for(
+        self, endpoint: _ProviderEndpoint, tools: Sequence[Mapping[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
+        source = self.tools if tools is None else tools
         if endpoint.provider != "deepseek":
-            return [dict(tool) for tool in self.tools]
+            return [dict(tool) for tool in source]
         normalized: list[dict[str, Any]] = []
-        for raw_tool in self.tools:
+        for raw_tool in source:
             tool = dict(raw_tool)
             function = _mapping(tool.get("function"))
             function.pop("strict", None)
@@ -466,4 +494,6 @@ __all__ = [
     "LiteLLMAgentModel",
     "ModelStreamEvent",
     "normalize_provider_usage",
+    "stream_model",
+    "supports_tool_loading",
 ]

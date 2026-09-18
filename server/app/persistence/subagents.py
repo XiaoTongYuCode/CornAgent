@@ -395,6 +395,42 @@ class SubagentRepository:
         context_state: dict[str, Any],
         usage: dict[str, Any],
     ) -> list[dict[str, Any]]:
+        metadata = part.get("metadata") or {}
+        call_id = metadata.get("tool_call_id")
+        if active_wait is None and call_id:
+            response = next(
+                (
+                    m
+                    for m in reversed(messages)
+                    if m.get("role") == "tool" and m.get("tool_call_id") == call_id
+                ),
+                None,
+            )
+            if response is not None:
+                arguments = next(
+                    (
+                        json.loads(call["function"]["arguments"])
+                        for message in messages
+                        for call in message.get("tool_calls", [])
+                        if call.get("id") == call_id
+                    ),
+                    {},
+                )
+                AgentRepository(self.db)._persist_tool_receipts(
+                    root,
+                    [part],
+                    messages,
+                    [
+                        {
+                            "call_id": call_id,
+                            "tool_name": metadata["tool_name"],
+                            "arguments": arguments,
+                            "result": json.loads(response["content"]),
+                            "read_only": True,
+                        }
+                    ],
+                    compact_results=False,
+                )
         root.content_parts = _upsert_part(root.content_parts, part)
         for task in selected:
             task.delivery_status = "delivered"

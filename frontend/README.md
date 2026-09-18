@@ -122,3 +122,13 @@ AI 回复完成且正文包含 🎉 时，调用 `agentCelebration.ts` 播放庆
 ## 使用统计
 
 `/usage` 展示全站所有用户的汇总统计，保留应用身份认证并复用导航，按需加载 Bklit UI 图表，支持 7/30/90 天、双语、主题、空态、错误重试和每日明细。图表与可插拔采集器的指标口径见[使用统计](../docs/usage-analytics.md)。
+
+## 排队与引导、扩展附件
+
+运行中输入框继续接收文字和附件，Enter 排队、Ctrl+Enter 调整当前任务方向；空输入只显示停止按钮，
+Enter 不会误触停止。`AgentInputQueue` 共用会话的持久化 inputs，支持版本校验的编辑、删除、模式切换和失败重试。
+编辑队列项保留原附件；取消编辑恢复输入草稿。语言/主题切换不重建工作区或清空待发送内容。
+
+`fileFormats.ts` 统一 MIME 与后缀，支持图片、PDF、TXT、MD、CSV、TSV、DOCX。
+附件托盘、消息文件卡、格式图标与打开/下载操作共用 CornAgent 的 gateway/i18n。
+文档均调用提取接口，只有图片使用缩略图；共享 `AgentConversation` 同时用于完整页与侧栏。

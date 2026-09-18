@@ -25,7 +25,7 @@ export interface AgentContentPart {
   metadata?: Record<string, unknown> | AgentQuestionMetadata
 }
 
-export type AgentFileMimeType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf'
+export type AgentFileMimeType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf' | 'text/plain' | 'text/markdown' | 'text/csv' | 'text/tab-separated-values' | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 export interface AgentFile {
   fileId: string
@@ -105,6 +105,7 @@ export interface AgentSession {
 export interface AgentSessionDetail extends AgentSession {
   messages: AgentMessage[]
   activeRun: AgentRun | null
+  inputs?: AgentInput[]
   nextBefore: string | null
 }
 
@@ -123,7 +124,7 @@ export interface AgentSnapshot {
 
 export interface AgentSseEvent {
   id: string
-  event: 'session' | 'delta' | 'reasoning_delta' | 'tool_call' | 'user_question' | 'snapshot' | 'done' | 'error' | 'cancelled'
+  event: 'session' | 'delta' | 'reasoning_delta' | 'tool_call' | 'user_question' | 'snapshot' | 'done' | 'error' | 'cancelled' | 'input_queued' | 'input_applied'
   data: Record<string, unknown>
 }
 
@@ -180,4 +181,15 @@ export function subagentMetadata(part: { kind: string; metadata?: unknown }): Su
     || !['queued', 'running', 'completed', 'failed', 'needs_input', 'cancelled', 'timed_out'].includes(metadata.status ?? '')
     || !['pending', 'delivered', 'ignored'].includes(metadata.delivery_status ?? '')) return null
   return metadata as SubagentTaskMetadata
+}
+
+export interface AgentInput {
+  id: string
+  session_id: string
+  mode: 'queue' | 'steer'
+  status: 'pending' | 'failed' | 'applied' | 'cancelled'
+  content: string
+  file_ids: string[]
+  version: number
+  error_message: string | null
 }

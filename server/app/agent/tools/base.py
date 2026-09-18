@@ -14,6 +14,7 @@ ToolHandler = Callable[[dict[str, Any], "ToolExecutionContext"], Awaitable[Any]]
 ToolStatusDetail = str | Callable[[Mapping[str, Any]], str | None] | None
 ToolResultPresenter = Callable[[Any], str | None]
 ToolResultProjector = Callable[[Any], Any]
+ToolOutcomeProjector = Callable[[Any], Mapping[str, Any] | None]
 
 
 class ToolContractError(ValueError):
@@ -60,6 +61,8 @@ class ToolExecutionContext:
     extra: dict[str, Any] = field(default_factory=dict)
     checkpoint_state: dict[str, Any] = field(default_factory=dict)
     runtime_cache: dict[str, Any] = field(default_factory=dict)
+    # Frozen before each provider request; loading affects only the next request.
+    advertised_tools: frozenset[str] | None = None
 
     @property
     def cancelled(self) -> bool:
@@ -88,6 +91,7 @@ class ToolExecutionContext:
             extra=self.extra,
             checkpoint_state=self.checkpoint_state,
             runtime_cache=self.runtime_cache,
+            advertised_tools=self.advertised_tools,
         )
 
 
@@ -110,8 +114,15 @@ class ToolDefinition:
     result_projector: ToolResultProjector | None = None
     execution_scopes: frozenset[str] = frozenset({"root"})
     read_only: bool = False
+    resident: bool = False
+    group: str = ""
+    keywords: tuple[str, ...] = ()
+    effect: Literal["read", "write", "control"] | None = None
+    outcome_projector: ToolOutcomeProjector | None = None
 
     def __post_init__(self) -> None:
+        if self.private_result and (not self.read_only or self.effect == "write"):
+            raise ValueError("Private result tools must be read-only; their reads may be replayed.")
         if self.approval_handler is not None:
             if self.runtime_handler not in {None, "tool_approval"} or self.private_result:
                 raise ValueError(

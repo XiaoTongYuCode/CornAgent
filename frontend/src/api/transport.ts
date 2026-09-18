@@ -77,6 +77,9 @@ const errorCodes: Readonly<Record<string, MessageKey>> = {
   agent_question_already_resolved: 'errorQuestionResolved',
   agent_run_not_waiting: 'errorQuestionResolved',
   agent_run_active: 'errorRunActive',
+  agent_input_changed: 'errorInputChanged',
+  agent_input_conflict: 'errorInputChanged',
+  agent_input_queue_full: 'errorInputQueueFull',
 }
 const errorStatuses: Readonly<Record<number, MessageKey>> = {
   401: 'errorUnauthorized', 403: 'errorForbidden', 404: 'errorNotFound',

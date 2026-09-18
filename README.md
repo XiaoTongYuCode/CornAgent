@@ -57,7 +57,12 @@ Building an agent product also requires sessions, streaming events, pausing, rec
 | Parallel subtasks | The main agent dispatches subtasks, waits for them, and collects results; cancellation, history recovery, and progress display are supported |
 | Optional user system | Disabled by default; invisible visitor identification, email/password, email codes, and passkeys, with per-user data isolation when enabled |
 | Sessions and branches | Paginated history, message editing, response regeneration, branch switching, and session deletion |
-| Images and PDFs | Attachment uploads, on-demand paginated PDF reading, and local or S3-compatible storage |
+| Attachments | Images, PDF, TXT, Markdown, CSV, TSV and DOCX; paginated reads, previews and downloads; local or S3-compatible storage |
+| Queue and steering | Durable pending messages; queue the next task or steer the current run at its next model boundary |
+| Context management | Model-window budgets, usage calibration, rolling summaries and bounded re-compaction |
+| Durable materials | Complete tool receipts with branch-scoped search, paginated reads and replay of completed calls |
+| On-demand tools | Discover tools and read skills as needed; loaded schemas survive checkpoints and follow the active branch |
+| Operation evidence | Committed field changes, drafts, partial failures and uncertain results derived from execution receipts |
 | Embedded integration | A standalone chat page and resizable sidebar share the same provider, sessions, and message components |
 | Interface preferences | English and Simplified Chinese, light and dark themes, collapsible navigation, and narrow-screen layouts |
 
@@ -152,6 +157,8 @@ Usage analytics is available at `/usage`, with optional tool/model event collect
 ## Tools and Subtasks
 
 Built-in tools include `ask_user`, `read_file`, `web_search`, `read_url`, and five subtask orchestration tools. The main agent can continue working, then wait for and collect subtask results as needed. Subtasks have their own durable state and cancellation mechanism.
+
+Use `search_tools` and `read_skill` to load capabilities as needed. `list_materials`, `search_materials`, `read_material`, and `read_tool_result` retrieve saved results within the current conversation branch. Completed tool calls are replayed from immutable receipts; calls interrupted before a receipt commits remain uncertain and are not blindly repeated. See [runtime](docs/runtime.md), [materials](docs/storage.md), and [operation evidence](docs/operation-evidence.md).
 
 `web_search` uses Tavily Search; `read_url` uses Tavily Extract. Both require `tavily_api_key` in `.env`. Both are available to the main agent and subagents. See [web tools](docs/web-tools.md).
 
@@ -253,4 +260,4 @@ When updating this README, keep the [Simplified Chinese version](README.zh-CN.md
 
 ## License
 
-CornAgent is released under the **[MIT License](LICENSE)**. See [NOTICE](NOTICE) for attribution to source projects and third-party dependencies.
+CornAgent is released under the **[MIT License](LICENSE)**. See [NOTICE](NOTICE) for third-party dependency attribution.

@@ -3,19 +3,37 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from app.agent.metrics import AgentMetrics
 from app.agent.model import AgentContextWindowExceededError, AgentModelClient
+from app.agent.model_context import checkpoint_byte_limit
 from app.persistence.agent_runtime import (
-    DURABLE_CHECKPOINT_SEED_MAX_BYTES,
+    DURABLE_CHECKPOINT_RESULT_RESERVE_BYTES,
     checkpoint_json_size_bytes,
 )
 from app.persistence.errors import DomainError
 
 Compactor = Callable[..., Awaitable[Mapping[str, Any] | str]]
 PRIVATE_TOOL_RESULT_REF_TYPE = "cintel_private_tool_result_ref"
+
+
+def estimate_tokens(value: Any) -> int:
+    # Do not count base64 as prose. Image usage is calibrated with actual provider usage.
+    def project(item):
+        if isinstance(item, dict):
+            if item.get("type") == "image_url":
+                return "x" * 3072
+            return {k: project(v) for k, v in item.items()}
+        if isinstance(item, list):
+            return [project(v) for v in item]
+        return item
+
+    text = json.dumps(project(value), ensure_ascii=False, separators=(",", ":"))
+    ascii_count = sum(ord(c) < 128 for c in text)
+    return math.ceil(ascii_count / 3 + (len(text) - ascii_count) * 1.5)
 
 
 class AgentContextManager:
@@ -29,9 +47,25 @@ class AgentContextManager:
         trigger_ratio: float = 0.8,
         summary_max_tokens: int = 4_096,
         metrics: AgentMetrics | None = None,
+        context_window_tokens: int = 64_000,
+        output_tokens: int = 16_384,
+        read_only_tools: set[str] | None = None,
     ) -> None:
         self._model_client = model_client
-        self._trigger_bytes = int(DURABLE_CHECKPOINT_SEED_MAX_BYTES * trigger_ratio)
+        self.input_budget = int(context_window_tokens * 0.8) - output_tokens
+        if self.input_budget < 1024:
+            raise ValueError("Context window must leave at least 1024 input tokens")
+        self._read_only_tools = read_only_tools
+        self.overhead_tokens = estimate_tokens(
+            {
+                "system": getattr(model_client, "system_prompt", ""),
+                "tools": getattr(model_client, "tools", []),
+            }
+        )
+        self._trigger_bytes = int(
+            (checkpoint_byte_limit(context_window_tokens) - DURABLE_CHECKPOINT_RESULT_RESERVE_BYTES)
+            * trigger_ratio
+        )
         self._summary_max_tokens = summary_max_tokens
         self._metrics = metrics
 
@@ -43,10 +77,25 @@ class AgentContextManager:
         tool_context_state: Mapping[str, Any],
         trigger: str,
         force: bool = False,
+        overhead_tokens: int = 0,
+        model_overhead_tokens: int | None = None,
+        prepare: Callable[[list[dict[str, Any]]], Awaitable[list[dict[str, Any]]]] | None = None,
+        on_start: Callable[[], Awaitable[None]] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
         candidate = [dict(message) for message in messages]
         initial_bytes = self._probe_size(checkpoint, candidate, tool_context_state)
-        if not force and initial_bytes < self._trigger_bytes:
+        ratio = max(0.5, min(4.0, float(tool_context_state.get("context_token_ratio", 1))))
+        overhead = (
+            self.overhead_tokens if model_overhead_tokens is None else model_overhead_tokens
+        ) + overhead_tokens
+
+        async def cost(value):
+            hydrated = await prepare(value) if prepare else value
+            return (estimate_tokens(hydrated) + overhead) * ratio
+
+        initial_tokens = await cost(candidate)
+        target_tokens = (overhead + max(0, self.input_budget / ratio - overhead) * 0.6) * ratio
+        if not force and initial_bytes < self._trigger_bytes and initial_tokens < self.input_budget:
             return candidate, None
         compact = getattr(self._model_client, "compact", None)
         if not callable(compact):
@@ -54,41 +103,91 @@ class AgentContextManager:
                 "agent_context_compaction_unavailable",
                 "The model adapter cannot compact an oversized Agent context.",
             )
+        if on_start:
+            await on_start()
         passes = 0
+        previous_tokens = initial_tokens
         previous_bytes = initial_bytes
         while passes < self._MAX_PASSES:
-            prefix_end = self._compactable_prefix_end(candidate)
-            if prefix_end <= 0:
+            selected = self._select_units(candidate, include_private=prepare is not None)
+            if not selected:
                 raise DomainError(
                     "agent_context_compaction_failed",
                     "Agent context is too large and has no safe compaction boundary.",
                 )
-            compactable_prefix, retained_private_units = self._partition_private_tool_units(
-                candidate[:prefix_end]
-            )
-            if not compactable_prefix:
-                raise DomainError(
-                    "agent_context_compaction_failed",
-                    "Agent context cannot be compacted without discarding private tool evidence.",
-                )
+            compactable_prefix = [candidate[i] for i in sorted(selected)]
+            before_candidate = candidate
+            summary_input = await prepare(compactable_prefix) if prepare else compactable_prefix
+            # Summarization sees read text, never base64 or a raw private reference.
+            summary_input = [
+                {**m, "content": [p for p in m["content"] if p.get("type") != "image_url"]}
+                if isinstance(m.get("content"), list)
+                else m
+                for m in summary_input
+            ]
             summary_payload = await self._compact_prefix(
-                compactable_prefix,
+                summary_input,
                 compact,
-                max_tokens=self._summary_max_tokens,
+                max_tokens=min(self._summary_max_tokens, max(256, self.input_budget // 8)),
             )
+            facts = []
+            receipts = []
+            for message in compactable_prefix:
+                if isinstance(message.get("cornagent_receipt"), dict):
+                    receipts.append(message["cornagent_receipt"])
+                if self._is_private_tool_result(message):
+                    facts.append(json.loads(message["content"]))
+                if message.get("role") == "system" and str(message.get("content", "")).startswith(
+                    "Context checkpoint v1."
+                ):
+                    try:
+                        prior = json.loads(message["content"].split("\n", 1)[1])
+                        facts.extend(prior.get("file_reads", []))
+                        receipts.extend(prior.get("tool_receipts", []))
+                    except (ValueError, IndexError):
+                        pass
+            # These reference identities are server-owned and survive re-compaction.
+            summary_payload["file_reads"] = list(
+                {json.dumps(f, sort_keys=True): f for f in facts}.values()
+            )
+            if receipts:
+                summary_payload["tool_receipts"] = list(
+                    {json.dumps(r, sort_keys=True): r for r in receipts}.values()
+                )
+            else:
+                summary_payload.pop("tool_receipts", None)
+            first = min(selected)
             candidate = [
-                self._summary_message(summary_payload),
-                *retained_private_units,
-                *candidate[prefix_end:],
+                replacement
+                for i, message in enumerate(candidate)
+                for replacement in (
+                    [self._summary_message(summary_payload)]
+                    if i == first
+                    else []
+                    if i in selected
+                    else [message]
+                )
             ]
             passes += 1
             current_bytes = self._probe_size(checkpoint, candidate, tool_context_state)
-            if current_bytes >= previous_bytes:
+            current_tokens = await cost(candidate)
+            if current_bytes >= previous_bytes and current_tokens >= previous_tokens:
+                if (
+                    passes > 1
+                    and previous_bytes < self._trigger_bytes
+                    and previous_tokens < self.input_budget
+                ):
+                    return before_candidate, {
+                        "trigger": trigger,
+                        "passes": passes - 1,
+                        "before_bytes": initial_bytes,
+                        "after_bytes": previous_bytes,
+                    }
                 raise DomainError(
                     "agent_context_compaction_failed",
                     "Structured context compaction did not reduce the durable checkpoint.",
                 )
-            if current_bytes < self._trigger_bytes:
+            if current_bytes < self._trigger_bytes * 0.6 and current_tokens < target_tokens:
                 if self._metrics is not None:
                     self._metrics.increment(
                         "cornagent_agent_context_compactions_total",
@@ -100,8 +199,21 @@ class AgentContextManager:
                     "passes": passes,
                     "before_bytes": initial_bytes,
                     "after_bytes": current_bytes,
+                    "before_tokens": initial_tokens,
+                    "after_tokens": current_tokens,
+                    "input_budget_tokens": self.input_budget,
+                    "token_ratio": ratio,
                 }
             previous_bytes = current_bytes
+            previous_tokens = current_tokens
+        if previous_bytes < self._trigger_bytes and previous_tokens < self.input_budget:
+            return candidate, {
+                "schema_version": 1,
+                "trigger": trigger,
+                "passes": passes,
+                "before_bytes": initial_bytes,
+                "after_bytes": previous_bytes,
+            }
         raise DomainError(
             "agent_context_compaction_failed",
             "Agent context remained oversized after the maximum compaction passes.",
@@ -117,7 +229,23 @@ class AgentContextManager:
     ) -> dict[str, Any]:
         messages = self._project_files_for_compaction(messages)
         try:
-            return self._validate_summary(await compact(messages, max_tokens=max_tokens))
+            if estimate_tokens(messages) > self.input_budget * 0.6:
+                raise AgentContextWindowExceededError("compaction_preflight")
+            result = self._validate_summary(await compact(messages, max_tokens=max_tokens))
+            for _ in range(3):
+                if estimate_tokens(result) <= max_tokens:
+                    return result
+                before = estimate_tokens(result)
+                result = self._validate_summary(
+                    await compact(
+                        [self._summary_message(result)], max_tokens=max(256, max_tokens // 2)
+                    )
+                )
+                if estimate_tokens(result) >= before:
+                    raise DomainError("agent_context_compaction_failed", "Summary did not shrink.")
+            if estimate_tokens(result) > max_tokens:
+                raise DomainError("agent_context_compaction_failed", "Summary remained oversized.")
+            return result
         except AgentContextWindowExceededError as exc:
             if depth >= self._MAX_SPLIT_DEPTH:
                 raise DomainError(
@@ -220,6 +348,57 @@ class AgentContextManager:
                 + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             ),
         }
+
+    def _select_units(self, messages, *, include_private=False):
+        latest_user = max(
+            (i for i, m in enumerate(messages) if m.get("role") == "user"), default=-1
+        )
+        selected = []
+        offset = 0
+        for unit in self._message_units(messages):
+            indexes = list(range(offset, offset + len(unit)))
+            offset += len(unit)
+            first = unit[0]
+            if latest_user in indexes or (
+                not include_private and any(self._is_private_tool_result(m) for m in unit)
+            ):
+                continue
+            if any(
+                isinstance(m.get("content"), list)
+                and any(
+                    isinstance(p, dict) and p.get("type") == "cintel_file_ref" for p in m["content"]
+                )
+                for m in unit
+            ):
+                continue
+            if first.get("role") == "system" and not str(first.get("content", "")).startswith(
+                "Context checkpoint v1."
+            ):
+                continue
+            calls = first.get("tool_calls", [])
+            if calls:
+                ids = {c.get("id") for c in calls}
+                if len(unit) != len(calls) + 1 or {m.get("tool_call_id") for m in unit[1:]} != ids:
+                    continue
+                receipts_by_call = {
+                    m.get("tool_call_id"): m.get("cornagent_receipt") for m in unit[1:]
+                }
+                if self._read_only_tools is not None and any(
+                    c.get("function", {}).get("name") not in self._read_only_tools
+                    and not isinstance(receipts_by_call.get(c.get("id")), dict)
+                    for c in calls
+                ):
+                    continue
+            elif first.get("role") == "tool":
+                continue
+            selected.append(indexes)
+        # Keep recent completed groups when meaningful earlier history exists.
+        older = selected[:-2]
+        if older and estimate_tokens([messages[i] for u in older for i in u]) > min(
+            2048, self.input_budget // 4
+        ):
+            selected = older
+        return {i for unit in selected for i in unit}
 
     @staticmethod
     def _compactable_prefix_end(messages: list[dict[str, Any]]) -> int:

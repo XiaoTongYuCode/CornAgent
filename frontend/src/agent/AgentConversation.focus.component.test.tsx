@@ -41,7 +41,7 @@ it.each([false, true])('restores composer focus after every run with initial foc
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }))
     await waitFor(() => expect(send).toHaveBeenCalledWith(content, []))
     view.rerender(show(workspace(true), focusPrompt))
-    expect(input()).toBeDisabled()
+    expect(input()).not.toBeDisabled()
     screen.getByRole('button', { name: '其他操作' }).focus()
 
     view.rerender(show(workspace(false, true), focusPrompt))

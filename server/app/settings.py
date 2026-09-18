@@ -162,6 +162,9 @@ class Settings(BaseSettings):
     )
     agent_fallback_supports_images: bool = False
     agent_context_checkpoint_trigger_ratio: float = Field(default=0.8, ge=0.5, le=0.95)
+    agent_context_window_tokens: int | None = Field(default=None, ge=4096, le=2_000_000)
+    agent_fallback_context_window_tokens: int | None = Field(default=None, ge=4096, le=2_000_000)
+    agent_output_max_tokens: int = Field(default=16_384, ge=256, le=128_000)
     agent_context_summary_max_tokens: int = Field(default=4_096, ge=256, le=32_768)
 
     @field_validator("file_store_path", "frontend_dist")

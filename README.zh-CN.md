@@ -57,7 +57,12 @@ CornAgent 是开源全栈 AI Agent（Open-source Full-stack AI Agent）。你可
 | 并行子任务 | 主 Agent 派发、等待和收取子任务结果；支持取消、历史恢复与过程展示 |
 | 可选用户系统 | 默认关闭；支持无感访客识别、邮箱密码、邮箱验证码和 Passkey，启用后按用户隔离数据 |
 | 会话与分支 | 历史分页、编辑消息、重新生成、切换分支与删除会话 |
-| 图片与 PDF | 上传附件，按需分页读取 PDF；本地或 S3 兼容存储 |
+| 会话附件 | 图片、PDF、TXT、Markdown、CSV、TSV、DOCX；分页读取、预览与下载，本地或 S3 兼容存储 |
+| 排队与引导 | 待处理消息持久化，当前任务结束后依次执行；引导消息在下一模型边界生效 |
+| 上下文管理 | 模型窗口预算、实际用量校准、滚动摘要与有界再压缩 |
+| 持久资料 | 完整工具回执、有效分支内搜索、分页回读与已完成调用复用 |
+| 按需工具 | 发现工具、读取技能；加载集合随检查点和有效会话分支恢复 |
+| 操作事实 | 根据执行回执展示已提交字段变化、草稿、部分失败与未知结果 |
 | 页面内集成 | 独立聊天页与可调整宽度的侧边栏共用 Provider、会话和消息组件 |
 | 界面偏好 | 中英文、深浅主题、可折叠导航与窄屏布局 |
 
@@ -152,6 +157,8 @@ export default function App() {
 ## 工具与子任务
 
 内置 `ask_user`、`read_file`、`web_search`、`read_url`，以及五个子任务编排工具。主 Agent 可以继续工作，再按需等待和收取子任务结果；子任务也有独立的持久化状态与取消机制。
+
+通过 `search_tools` 和 `read_skill` 按需加载能力。`list_materials`、`search_materials`、`read_material` 和 `read_tool_result` 在当前会话分支内检索已保存的结果。已完成调用直接复用不可变回执；回执提交前中断的调用仍视为结果不明，不盲目重复执行。详见[运行时](docs/runtime.md)、[资料存储](docs/storage.md)与[操作事实](docs/operation-evidence.md)。
 
 `web_search` 使用 Tavily Search，`read_url` 使用 Tavily Extract，两者均需在 `.env` 配置 `tavily_api_key`，主 Agent 与子 Agent 均可使用。详见[网络工具](docs/web-tools.md)。
 
@@ -251,4 +258,4 @@ CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 
 ## 许可
 
-CornAgent 使用 **[MIT 许可证](LICENSE)**。移植来源与第三方依赖说明见 [NOTICE](NOTICE)。
+CornAgent 使用 **[MIT 许可证](LICENSE)**。第三方依赖说明见 [NOTICE](NOTICE)。

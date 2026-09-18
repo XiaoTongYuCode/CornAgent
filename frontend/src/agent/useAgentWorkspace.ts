@@ -3,7 +3,7 @@ import { createClientId } from '../client-id'
 import { apiErrorMessage } from '../api/transport'
 import { messages } from '../i18n/catalog'
 import { HttpAgentGateway, toRun, toSnapshot } from './gateway'
-import type { AgentContentPart, AgentFileInputCapabilities, AgentMessage, AgentQuestionResponse, AgentRun, AgentSession, AgentSessionDetail, AgentSessionPage, AgentSnapshot, AgentSseEvent, AgentUploadedFile } from './types'
+import type { AgentInput, AgentContentPart, AgentFileInputCapabilities, AgentMessage, AgentQuestionResponse, AgentRun, AgentSession, AgentSessionDetail, AgentSessionPage, AgentSnapshot, AgentSseEvent, AgentUploadedFile } from './types'
 
 const TERMINAL = new Set<AgentRun['status']>(['completed', 'failed', 'cancelled'])
 
@@ -36,6 +36,8 @@ function mergeMessages(...collections: AgentMessage[][]) {
 }
 
 export interface AgentWorkspace {
+  queueInput(content: string, fileIds: string[], mode: 'queue' | 'steer'): Promise<void>
+  changeInput(input: AgentInput, patch: { content?: string; mode?: 'queue' | 'steer'; cancel?: boolean }): Promise<void>
   open: boolean
   available: boolean | null
   unavailableReason?: string | null
@@ -255,6 +257,9 @@ export function useAgentWorkspace(
           for await (const event of gateway.stream(runId, controller.signal, streamCursor.current)) {
             streamCursor.current = event.id
             terminal = applyEvent(event, setSnapshot)
+            if ((event.event === 'input_applied' || event.event === 'input_queued' || event.event === 'snapshot') && session?.id) {
+              await refreshSession(session.id)
+            }
             if (terminal) break
           }
           if (terminal) {
@@ -530,8 +535,35 @@ export function useAgentWorkspace(
     }
   }, [gateway, session?.id])
 
+  const queueInput = useCallback(async (content: string, fileIds: string[], mode: 'queue' | 'steer') => {
+    const id = sessionIdRef.current
+    if (!gateway || !id) throw new Error('Session unavailable')
+    await gateway.queueInput(id, content, fileIds, mode)
+    const detail = await refreshSession(id)
+    if (detail?.activeRun) {
+      setSnapshot(current => current?.run.id === detail.activeRun?.id ? current : null)
+      setStreamRevision(value => value + 1)
+    }
+  }, [gateway, refreshSession])
+  const changeInput = useCallback(async (input: AgentInput, patch: { content?: string; mode?: 'queue' | 'steer'; cancel?: boolean }) => {
+    if (!gateway) throw new Error('Agent unavailable')
+    await gateway.changeInput(input, patch)
+    await refreshSession(input.session_id)
+  }, [gateway, refreshSession])
+
+  // Another tab or a recovered dispatcher may advance the queue between SSE runs.
+  useEffect(() => {
+    if (!session?.id || (!session.inputs?.length && !session.activeRun?.id)) return
+    const timer = window.setInterval(() => {
+      void refreshSession(session.id).then(detail => {
+        if (detail?.activeRun) setSnapshot(current => current?.run.id === detail.activeRun?.id ? current : null)
+      }).catch(() => undefined)
+    }, 1500)
+    return () => window.clearInterval(timer)
+  }, [session?.id, session?.inputs?.length, session?.activeRun?.id, refreshSession])
+
   return useMemo(() => ({
-    open, available, unavailableReason, fileInput, draftRevisionKey: `${principalKey}:${session?.id ?? 'new'}`, sessions, session, snapshot, busy, loadingOlder, loadingMoreSessions,
+    queueInput, changeInput, open, available, unavailableReason, fileInput, draftRevisionKey: `${principalKey}:${session?.id ?? 'new'}`, sessions, session, snapshot, busy, loadingOlder, loadingMoreSessions,
     sessionsNextCursor, error, setOpen, ask, send: start, newSession, selectSession,
     deleteSession, uploadFile, deleteFile, loadMoreSessions, searchSessions, loadOlder, respond, cancel,
     regenerate: (messageId: string) => {
@@ -545,7 +577,7 @@ export function useAgentWorkspace(
       return runVersionAction(expectedSessionId, () => gateway.edit(messageId, content))
     },
     switchVersion: switchMessageVersion,
-  }), [available, unavailableReason, ask, busy, cancel, deleteFile, deleteSession, error, fileInput, gateway, loadMoreSessions, loadOlder, loadingMoreSessions, loadingOlder, newSession, open, principalKey, respond, runVersionAction, searchSessions, selectSession, session, sessions, sessionsNextCursor, snapshot, start, switchMessageVersion, uploadFile])
+  }), [queueInput, changeInput, available, unavailableReason, ask, busy, cancel, deleteFile, deleteSession, error, fileInput, gateway, loadMoreSessions, loadOlder, loadingMoreSessions, loadingOlder, newSession, open, principalKey, respond, runVersionAction, searchSessions, selectSession, session, sessions, sessionsNextCursor, snapshot, start, switchMessageVersion, uploadFile])
 }
 
 export function applyEvent(

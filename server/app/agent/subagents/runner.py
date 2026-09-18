@@ -9,12 +9,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agent.context import AgentContextManager
+from app.agent.context import AgentContextManager, estimate_tokens
 from app.agent.metrics import AgentMetrics
-from app.agent.model import AgentModelClient
+from app.agent.model import AgentModelClient, stream_model, supports_tool_loading
 from app.agent.subagents.prompt import CHILD_AGENT_SYSTEM_PROMPT, MOCK_EVIDENCE_RULE
 from app.agent.tool_executor import AgentToolExecutor, ToolAdmission
 from app.agent.tools import AgentToolCatalog, ToolExecutionContext
+from app.agent.tools.loading import ToolLoader
 from app.persistence.agent_runtime import _merge_usage, checkpoint_json_size_bytes
 from app.persistence.errors import DomainError
 from app.telemetry import bind
@@ -43,6 +44,9 @@ class ChildAgentRunner:
         metrics: AgentMetrics,
         *,
         model_name: str,
+        context_window_tokens: int = 64_000,
+        output_tokens: int = 16_384,
+        tool_loader: ToolLoader | None = None,
         tool_admission: ToolAdmission | None = None,
         telemetry=None,
     ):
@@ -52,6 +56,9 @@ class ChildAgentRunner:
         self.executor = AgentToolExecutor(self.catalog, admission=tool_admission)
         self.metrics = metrics
         self.model_name = model_name
+        self.context_window_tokens = context_window_tokens
+        self.output_tokens = output_tokens
+        self.tool_loader = tool_loader
 
     async def run(self, task: dict[str, Any], cancel_event: asyncio.Event) -> dict[str, Any]:
         context = SimpleNamespace(
@@ -90,21 +97,54 @@ class ChildAgentRunner:
             fence=task["fence"],
             cancel_event=cancel_event,
         )
-        compactor = AgentContextManager(self.model, trigger_ratio=0.8, summary_max_tokens=4096)
+        compactor = AgentContextManager(
+            self.model,
+            trigger_ratio=0.8,
+            summary_max_tokens=4096,
+            context_window_tokens=self.context_window_tokens,
+            output_tokens=self.output_tokens,
+            read_only_tools={d.name for d in self.catalog.definitions() if d.read_only},
+        )
+        system_overhead = estimate_tokens(system)
         usage: dict[str, Any] = {}
         while True:
             context.raise_if_cancelled()
+            request_catalog = (
+                self.tool_loader.request_catalog(context)
+                if self.tool_loader and supports_tool_loading(self.model)
+                else self.catalog
+            )
+            context.advertised_tools = frozenset(request_catalog.names())
+            request_tools = request_catalog.provider_tools()
+            skill_blocks = (
+                self.tool_loader.skill_prompt_blocks(context)
+                if self.tool_loader and supports_tool_loading(self.model)
+                else []
+            )
+            request_system = system + ("\n\n" + "\n\n".join(skill_blocks) if skill_blocks else "")
+            system_overhead = estimate_tokens(request_system)
+            model_overhead = estimate_tokens(
+                {
+                    "system": getattr(self.model, "system_prompt", ""),
+                    "tools": request_tools,
+                }
+            )
             messages, _ = await compactor.fit(
                 messages,
                 {},
                 tool_context_state=context.checkpoint_state,
                 trigger="child_context_preflight",
+                overhead_tokens=system_overhead,
+                model_overhead_tokens=model_overhead,
             )
+            request_estimate = estimate_tokens(messages) + system_overhead + model_overhead
             content = ""
             reasoning = ""
             calls: list[dict[str, Any]] = []
-            async for event in self.model.stream(
-                [{"role": "system", "content": system}, *messages]
+            async for event in stream_model(
+                self.model,
+                [{"role": "system", "content": request_system}, *messages],
+                tools=request_tools,
             ):
                 context.raise_if_cancelled()
                 if event.kind == "content":
@@ -115,6 +155,13 @@ class ChildAgentRunner:
                     calls = event.tool_calls
                 elif event.kind == "usage":
                     usage = _merge_usage(usage, event.payload)
+                    actual = event.payload.get(
+                        "prompt_tokens", event.payload.get("input_tokens", 0)
+                    )
+                    if isinstance(actual, (int, float)) and actual > 0:
+                        context.checkpoint_state["context_token_ratio"] = max(
+                            0.5, min(4, actual / max(1, request_estimate) * 1.1)
+                        )
                 if len(content.encode()) + len(reasoning.encode()) > 3 * 1024 * 1024:
                     raise DomainError(
                         "subagent_result_too_large", "The child response exceeds 3 MiB."
@@ -196,5 +243,7 @@ class ChildAgentRunner:
                     {},
                     tool_context_state=context.checkpoint_state,
                     trigger="child_tool_result",
+                    overhead_tokens=system_overhead,
+                    model_overhead_tokens=model_overhead,
                     force=True,
                 )

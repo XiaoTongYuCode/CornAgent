@@ -153,11 +153,29 @@ class AgentSkillDefinition:
     name: str
     instructions: str
     required_tools: frozenset[str]
+    description: str = ""
+    keywords: tuple[str, ...] = ()
+    execution_scopes: frozenset[str] = frozenset({"root", "child"})
+    required_flags: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if not self.name.strip() or not self.instructions.strip():
+            raise ValueError("Agent skill requires a name and instructions.")
+        if not self.execution_scopes or not self.execution_scopes <= {"root", "child"}:
+            raise ValueError("Agent skill execution_scopes must contain root and/or child.")
 
 
 class AgentSkillCatalog:
     def __init__(self, skills: tuple[AgentSkillDefinition, ...] = ()) -> None:
+        if len({skill.name for skill in skills}) != len(skills):
+            raise ValueError("Agent skill names must be unique.")
         self._skills = skills
+
+    def definitions(self) -> tuple[AgentSkillDefinition, ...]:
+        return self._skills
+
+    def get(self, name: str) -> AgentSkillDefinition | None:
+        return next((skill for skill in self._skills if skill.name == name), None)
 
     def active_prompt_blocks(self, mounted_tools: set[str]) -> list[str]:
         return [

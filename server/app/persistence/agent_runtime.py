@@ -18,6 +18,9 @@ from sqlalchemy import Select, and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only
 
+from app.agent.model_context import checkpoint_byte_limit
+from app.document_formats import DOCUMENT_TYPES
+from app.persistence import inputs
 from app.persistence.agent_schemas import (
     AGENT_FILE_IMAGE_MIME_TYPES,
     AGENT_FILE_MAX_COUNT,
@@ -93,8 +96,10 @@ def checkpoint_json_size_bytes(payload: dict[str, Any]) -> int:
 def ensure_checkpoint_size(
     payload: dict[str, Any],
     *,
-    max_bytes: int = DURABLE_CHECKPOINT_MAX_BYTES,
+    max_bytes: int | None = None,
 ) -> None:
+    if max_bytes is None:
+        max_bytes = checkpoint_byte_limit(int(payload.get("context_window_tokens", 64000)))
     size_bytes = checkpoint_json_size_bytes(payload)
     if size_bytes > max_bytes:
         raise DomainError(
@@ -272,12 +277,14 @@ class AgentRepository:
         file_max_count: int = AGENT_FILE_MAX_COUNT,
         file_max_total_bytes: int = AGENT_FILE_MAX_TOTAL_BYTES,
         pdf_max_count: int = AGENT_FILE_PDF_MAX_COUNT,
+        context_window_tokens: int = 64_000,
     ) -> None:
         self.db = db
         self.file_input_enabled = file_input_enabled
         self.file_max_count = file_max_count
         self.file_max_total_bytes = file_max_total_bytes
         self.pdf_max_count = pdf_max_count
+        self.context_window_tokens = context_window_tokens
 
     def list_sessions(
         self,
@@ -487,7 +494,10 @@ class AgentRepository:
         before_message_id: str | None = None,
         limit: int = 40,
     ) -> AgentSessionDetail:
-        session = self._owned_session(identity, session_id)
+        # Serialize the short read against queue dispatch/steering. Under READ COMMITTED,
+        # reading an old active Run and a newly drained queue otherwise reports false idle.
+        # No Run row locks are acquired here, preserving the worker's Run -> Session order.
+        session = self._owned_session(identity, session_id, for_update=True)
         # Read the active Run before messages. This preserves a coherent state
         # boundary while a background worker commits a pause or terminal update.
         active_run = self.db.scalar(
@@ -658,6 +668,7 @@ class AgentRepository:
                 )
                 for item in messages
             ],
+            inputs=[inputs.output(item) for item in inputs.pending(self.db, session.id)],
             active_run=_run_out(active_run) if active_run is not None else None,
             next_before=page_rows[-1].id if has_older and page_rows else None,
         )
@@ -836,6 +847,8 @@ class AgentRepository:
             version_group_id=user_id,
             version_index=1,
             process_started_at=now,
+            created_at=now,
+            updated_at=now,
         )
         assistant = AgentMessage(
             id=assistant_id,
@@ -850,6 +863,8 @@ class AgentRepository:
             version_group_id=assistant_id,
             version_index=1,
             process_started_at=now,
+            created_at=now + timedelta(microseconds=1),
+            updated_at=now,
         )
         run = self._new_run(
             identity,
@@ -919,6 +934,8 @@ class AgentRepository:
             version_index=int(latest or 0) + 1,
             supersedes_message_id=target.id,
             process_started_at=now,
+            created_at=now,
+            updated_at=now,
         )
         run = self._new_run(
             identity,
@@ -1003,6 +1020,8 @@ class AgentRepository:
             version_index=int(latest or 0) + 1,
             supersedes_message_id=target.id,
             process_started_at=now,
+            created_at=now,
+            updated_at=now,
         )
         assistant = AgentMessage(
             id=assistant_id,
@@ -1017,6 +1036,8 @@ class AgentRepository:
             version_group_id=assistant_id,
             version_index=1,
             process_started_at=now,
+            created_at=now + timedelta(microseconds=1),
+            updated_at=now,
         )
         run = self._new_run(
             identity,
@@ -1117,6 +1138,38 @@ class AgentRepository:
             )
         return max(leaves, key=lambda item: (item.created_at, item.id))
 
+    def _inherited_tool_loading(self, run: AgentRun) -> dict[str, Any]:
+        """Only inherit server state along this input's branch, never sibling text."""
+        message = self.db.get(AgentMessage, run.user_message_id)
+        seen: set[str] = set()
+        while message is not None and message.id not in seen:
+            seen.add(message.id)
+            if (
+                message.session_id != run.session_id
+                or message.tenant_id != run.tenant_id
+                or message.owner_membership_id != run.owner_membership_id
+            ):
+                break
+            if message.role == "assistant":
+                previous = self.db.scalar(
+                    select(AgentRun).where(
+                        AgentRun.assistant_message_id == message.id,
+                        AgentRun.session_id == run.session_id,
+                        AgentRun.tenant_id == run.tenant_id,
+                        AgentRun.owner_membership_id == run.owner_membership_id,
+                    )
+                )
+                if previous:
+                    loaded = previous.checkpoint.get("tool_context_state", {}).get("tool_loading")
+                    if isinstance(loaded, dict):
+                        return {"tool_loading": json.loads(json.dumps(loaded))}
+            message = (
+                self.db.get(AgentMessage, message.parent_message_id)
+                if message.parent_message_id
+                else None
+            )
+        return {}
+
     def claim_run(
         self, run_id: str, worker_id: str
     ) -> tuple[AgentRunOut, int, dict[str, Any]] | None:
@@ -1134,6 +1187,7 @@ class AgentRepository:
         run.started_at = run.started_at or now
         run.updated_at = now
         checkpoint = dict(run.checkpoint)
+        checkpoint["context_window_tokens"] = self.context_window_tokens
         if "provider_messages" not in checkpoint:
             messages = self._provider_lineage(run.user_message_id)
             checkpoint.update(
@@ -1143,8 +1197,9 @@ class AgentRepository:
                     "safe_draft_markdown": "",
                     "safe_reasoning_markdown": "",
                     "safe_content_parts": [],
+                    "context_window_tokens": self.context_window_tokens,
                     "tool_context_state_version": 1,
-                    "tool_context_state": {},
+                    "tool_context_state": self._inherited_tool_loading(run),
                 }
             )
         try:
@@ -1374,6 +1429,96 @@ class AgentRepository:
             usage=usage,
         )[0]
 
+    def _persist_tool_receipts(
+        self,
+        run: AgentRun,
+        parts: list[dict[str, Any]],
+        messages: list[dict[str, Any]] | None,
+        receipts: list[dict[str, Any]] | None = None,
+        *,
+        compact_results: bool = True,
+    ) -> None:
+        """Archive results in the same fenced transaction as their safe checkpoint."""
+        from app.persistence.materials import MATERIAL_TOOL_NAMES, MaterialRepository
+
+        records = (
+            receipts
+            if receipts is not None
+            else [
+                {
+                    "call_id": metadata["tool_call_id"],
+                    "tool_name": metadata["tool_name"],
+                    "arguments": metadata.get("arguments") or {},
+                    "result": metadata["result"],
+                    "read_only": True,
+                }
+                for part in parts
+                if (metadata := part.get("metadata") or {}).get("status") in {"completed", "failed"}
+                and metadata.get("tool_call_id")
+                and metadata.get("tool_name")
+                and "result" in metadata
+            ]
+        )
+        materials = MaterialRepository(self.db)
+        identity = Identity("", run.tenant_id, run.owner_membership_id)
+        for record in records:
+            if record["tool_name"] in MATERIAL_TOOL_NAMES:
+                continue
+            reference = materials.save(identity, run_id=run.id, **record)
+            compact_reference = {
+                key: reference[key]
+                for key in ("type", "receipt_id", "tool_name", "call_id", "read_only", "failed")
+            }
+            for part in parts:
+                metadata = part.get("metadata") or {}
+                if metadata.get("tool_call_id") != record["call_id"]:
+                    continue
+                metadata["receipt"] = compact_reference
+                if reference["size_bytes"] > 8192:
+                    metadata["result"] = reference
+                part["metadata"] = metadata
+            if messages is None:
+                continue
+            for index, message in enumerate(messages):
+                if (
+                    message.get("role") != "tool"
+                    or message.get("tool_call_id") != record["call_id"]
+                ):
+                    continue
+                message = {**message, "cornagent_receipt": compact_reference}
+                if (
+                    compact_results
+                    and reference["size_bytes"] > 8192
+                    and not record.get("private_result")
+                ):
+                    message["content"] = json.dumps(
+                        {
+                            **reference,
+                            "inline_truncated": True,
+                            "message": (
+                                "Complete result is saved. Use read_tool_result "
+                                "with receipt_id and cursor to read more."
+                            ),
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                messages[index] = message
+
+    @staticmethod
+    def _bound_operation_parts(
+        run: AgentRun, updated_parts: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        from app.agent.outcomes import trim_turn_operation_details
+
+        before = {part["id"]: part for part in run.content_parts}
+        bounded = trim_turn_operation_details(run.content_parts)
+        changed_ids = {part["id"] for part in bounded if part != before.get(part["id"])}
+        changed_ids.update(part["id"] for part in updated_parts)
+        run.content_parts = bounded
+        # Old details removed by the turn budget must update live clients as well.
+        return [part for part in bounded if part["id"] in changed_ids]
+
     def persist_tool_call_parts(
         self,
         run_id: str,
@@ -1385,14 +1530,17 @@ class AgentRepository:
         provider_messages: list[dict[str, Any]] | None = None,
         advance_safe_checkpoint: bool = False,
         complete_approval: bool = False,
+        receipts: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Persist full tool-call part upserts before publishing their SSE events."""
 
         run = self._locked_leased_run(run_id, worker_id, fence)
+        self._persist_tool_receipts(run, parts, provider_messages, receipts)
         for part in parts:
             if part.get("kind") != "tool_call":
                 raise ValueError("persist_tool_call_parts accepts only tool_call parts.")
             run.content_parts = _upsert_part(run.content_parts, part)
+        parts = self._bound_operation_parts(run, parts)
         if usage:
             run.provider_usage = _merge_usage(run.provider_usage, usage)
         checkpoint = dict(run.checkpoint)
@@ -1437,6 +1585,7 @@ class AgentRepository:
         tool_context_state: dict[str, Any],
         usage: dict[str, Any] | None = None,
         provider_messages: list[dict[str, Any]] | None = None,
+        receipts: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Persist an ordinary-tool batch with an explicit crash-recovery boundary.
 
@@ -1466,10 +1615,13 @@ class AgentRepository:
                 "The ordinary tool batch cannot be completed from its current durable state.",
                 status_code=409,
             )
+        if phase == "completed":
+            self._persist_tool_receipts(run, parts, provider_messages, receipts)
         for part in parts:
             if part.get("kind") != "tool_call":
                 raise ValueError("ordinary tool batches accept only tool_call parts.")
             run.content_parts = _upsert_part(run.content_parts, part)
+        parts = self._bound_operation_parts(run, parts)
         if usage:
             run.provider_usage = _merge_usage(run.provider_usage, usage)
         checkpoint.update(
@@ -1500,9 +1652,10 @@ class AgentRepository:
         ensure_checkpoint_size(
             checkpoint,
             max_bytes=(
-                DURABLE_CHECKPOINT_SEED_MAX_BYTES
+                checkpoint_byte_limit(int(checkpoint.get("context_window_tokens", 64000)))
+                - DURABLE_CHECKPOINT_RESULT_RESERVE_BYTES
                 if phase == "executing"
-                else DURABLE_CHECKPOINT_MAX_BYTES
+                else checkpoint_byte_limit(int(checkpoint.get("context_window_tokens", 64000)))
             ),
         )
         run.checkpoint = checkpoint
@@ -1515,6 +1668,10 @@ class AgentRepository:
         events = [_event(run, "tool_call", part) for part in parts]
         self.db.commit()
         return events
+
+    def consume_inputs(self, run_id, worker_id, fence, messages):
+        run = self._locked_leased_run(run_id, worker_id, fence)
+        return inputs.consume(self, run, messages)
 
     def persist_context_checkpoint(
         self,
@@ -1682,6 +1839,21 @@ class AgentRepository:
         run.lease_expires_at = None
         run.user_wait_started_at = None
         part = self._question_part_from_model(question, run)
+        if not approval:
+            self._persist_tool_receipts(
+                run,
+                [part],
+                provider_messages,
+                [
+                    {
+                        "call_id": question.tool_call_id,
+                        "tool_name": ASK_USER_TOOL_NAME,
+                        "arguments": {"query": question.query, "options": question.options},
+                        "result": tool_result,
+                        "read_only": True,
+                    }
+                ],
+            )
         run.content_parts = _upsert_part(run.content_parts, part)
         checkpoint["content_parts"] = run.content_parts
         checkpoint["safe_content_parts"] = run.content_parts
@@ -1747,8 +1919,15 @@ class AgentRepository:
         *,
         provider_messages: list[dict[str, Any]],
         usage: dict[str, Any],
+        tool_context_state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         run = self._locked_leased_run(run_id, worker_id, fence)
+        if tool_context_state is not None:
+            run.checkpoint = {**run.checkpoint, "tool_context_state": dict(tool_context_state)}
+        run.provider_usage = _merge_usage(run.provider_usage, usage)
+        steered = inputs.consume(self, run, provider_messages)
+        if steered:
+            return steered[1]
         now = _now()
         from app.persistence.subagents import assert_finalizable, settle_root_children
 
@@ -1756,7 +1935,6 @@ class AgentRepository:
         settle_root_children(self.db, run)
         terminal_parts = [dict(part) for part in run.content_parts]
         run.content_parts = terminal_parts
-        run.provider_usage = _merge_usage(run.provider_usage, usage)
         run.status = "completed"
         run.completed_at = now
         run.lease_owner = None
@@ -2104,7 +2282,7 @@ class AgentRepository:
         identity: Identity,
         *,
         session_id: str,
-        message_id: str,
+        message_id: str | None,
         attachment_file_ids: list[str] | tuple[str, ...],
     ) -> list[FileResource]:
         requested = list(attachment_file_ids)
@@ -2165,13 +2343,13 @@ class AgentRepository:
                     "A file upload has no validated content.",
                     status_code=409,
                 )
-            if item.mime_type == AGENT_FILE_PDF_MIME_TYPE and item.extraction_status != "ready":
+            if item.mime_type in DOCUMENT_TYPES and item.extraction_status != "ready":
                 raise DomainError(
                     "session_attachment_content_unavailable",
                     "The PDF content is not ready.",
                     status_code=409,
                 )
-            if item.mime_type not in {*AGENT_FILE_IMAGE_MIME_TYPES, AGENT_FILE_PDF_MIME_TYPE}:
+            if item.mime_type not in {*AGENT_FILE_IMAGE_MIME_TYPES, *DOCUMENT_TYPES}:
                 raise DomainError(
                     "session_attachment_format_unsupported",
                     "The file format is not supported.",
@@ -2191,6 +2369,8 @@ class AgentRepository:
                 item.agent_session_id = session_id
                 item.state = "ready"
                 item.ready_at = now
+            if message_id is None:
+                continue
             self.db.add(
                 AgentMessageFile(
                     message_id=message_id,
@@ -2229,8 +2409,8 @@ class AgentRepository:
             item.size_bytes is None
             or item.sha256 is None
             or item.inspection_status != "validated"
-            or item.mime_type not in {*AGENT_FILE_IMAGE_MIME_TYPES, AGENT_FILE_PDF_MIME_TYPE}
-            or (item.mime_type == AGENT_FILE_PDF_MIME_TYPE and item.extraction_status != "ready")
+            or item.mime_type not in {*AGENT_FILE_IMAGE_MIME_TYPES, *DOCUMENT_TYPES}
+            or (item.mime_type in DOCUMENT_TYPES and item.extraction_status != "ready")
             for item in rows
         ):
             raise DomainError(

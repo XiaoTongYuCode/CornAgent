@@ -437,3 +437,71 @@ class UsageEvent(Base):
     input_tokens: Mapped[int | None] = mapped_column(BigInteger)
     output_tokens: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AgentInput(Base):
+    __tablename__ = "cornagent_agent_inputs"
+    __table_args__ = (
+        CheckConstraint("mode IN ('queue','steer')", name="ck_agent_inputs_mode"),
+        CheckConstraint(
+            "status IN ('pending','applied','cancelled','failed')", name="ck_agent_inputs_status"
+        ),
+        Index("ix_agent_inputs_pending", "session_id", "status", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("cornagent_agent_sessions.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[str] = mapped_column(String(36))
+    mode: Mapped[str] = mapped_column(String(12))
+    status: Mapped[str] = mapped_column(String(12), default="pending")
+    content: Mapped[str] = mapped_column(Text)
+    file_ids: Mapped[list] = mapped_column(JSON, default=list)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    run_id: Mapped[str | None] = mapped_column(String(36))
+    message_id: Mapped[str | None] = mapped_column(String(36))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AgentInputMutation(Base):
+    __tablename__ = "cornagent_agent_input_mutations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    input_id: Mapped[str] = mapped_column(
+        ForeignKey("cornagent_agent_inputs.id", ondelete="CASCADE")
+    )
+    request_hash: Mapped[str] = mapped_column(String(64))
+    result: Mapped[dict] = mapped_column(JSON)
+
+
+class AgentToolReceipt(Base):
+    """Immutable results live outside the bounded model checkpoint."""
+
+    __tablename__ = "cornagent_agent_tool_receipts"
+    __table_args__ = (
+        UniqueConstraint("run_id", "call_id", name="uq_agent_receipts_run_call"),
+        CheckConstraint("size_bytes >= 0", name="ck_agent_receipts_size"),
+        Index("ix_agent_receipts_session_created", "session_id", "created_at", "id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(String(36))
+    owner_membership_id: Mapped[str] = mapped_column(String(36))
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("cornagent_agent_sessions.id", ondelete="CASCADE")
+    )
+    run_id: Mapped[str] = mapped_column(ForeignKey("cornagent_agent_runs.id", ondelete="CASCADE"))
+    call_id: Mapped[str] = mapped_column(String(240))
+    tool_name: Mapped[str] = mapped_column(String(160))
+    title: Mapped[str] = mapped_column(String(240))
+    arguments: Mapped[dict] = mapped_column(JSON)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    content_hash: Mapped[str] = mapped_column(String(64))
+    result_json: Mapped[str] = mapped_column(Text)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    read_only: Mapped[bool] = mapped_column(Boolean)
+    private_result: Mapped[bool] = mapped_column(Boolean)
+    failed: Mapped[bool] = mapped_column(Boolean)
+    source_truncated: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

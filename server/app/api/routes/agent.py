@@ -15,8 +15,11 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentIdentity, Db, StreamIdentity, get_run_rate_limit_identity
 from app.api.routes._common import IdempotencyKey, require_idempotency_key
+from app.document_formats import DOCUMENT_TYPES
 from app.persistence.agent_runtime import TERMINAL_RUN_STATUSES, AgentRepository
 from app.persistence.agent_schemas import (
+    AgentInputChange,
+    AgentInputCreate,
     AgentMessageEdit,
     AgentQuestionResponse,
     AgentQuestionResult,
@@ -64,8 +67,10 @@ def agent_status(request: Request, _identity: CurrentIdentity) -> dict[str, Any]
     return {
         "available": _runtime(request).available,
         "unavailable_reason": (
-            "model_not_configured" if _runtime(request).model_client is None
-            else "event_stream_not_configured" if _runtime(request).event_stream is None
+            "model_not_configured"
+            if _runtime(request).model_client is None
+            else "event_stream_not_configured"
+            if _runtime(request).event_stream is None
             else None
         ),
         "file_input": {
@@ -83,11 +88,16 @@ def agent_status(request: Request, _identity: CurrentIdentity) -> dict[str, Any]
                     }
                     for mime_type in settings.agent_file_image_mime_types
                 ],
-                {
-                    "mime_type": "application/pdf",
-                    "max_bytes": settings.agent_file_pdf_max_bytes,
-                    "max_count": settings.agent_file_pdf_max_count,
-                },
+                *[
+                    {
+                        "mime_type": mime,
+                        "max_bytes": settings.agent_file_pdf_max_bytes,
+                        "max_count": settings.agent_file_pdf_max_count
+                        if mime == "application/pdf"
+                        else settings.agent_file_max_count,
+                    }
+                    for mime in DOCUMENT_TYPES
+                ],
             ],
             "max_count": settings.agent_file_max_count,
             "max_total_bytes": settings.agent_file_max_total_bytes,
@@ -520,3 +530,55 @@ async def stream_agent_run(
 
 
 __all__ = ["router"]
+
+
+@router.post("/sessions/{session_id}/inputs")
+async def queue_agent_input(
+    session_id: str,
+    payload: AgentInputCreate,
+    request: Request,
+    identity: CurrentIdentity,
+    idempotency_key: IdempotencyKey = None,
+):
+    from app.persistence import inputs
+
+    runtime = _runtime(request)
+    runtime.require_available()
+    key = require_idempotency_key(idempotency_key)
+    replay = await _run_repository(
+        request, lambda repo: inputs.replay(repo, identity, session_id, payload, key)
+    )
+    if replay is not None:
+        return replay
+    await request.app.state.agent_run_rate_limiter.require(get_run_rate_limit_identity(request))
+    result = await _run_repository(
+        request, lambda repo: inputs.create(repo, identity, session_id, payload, key)
+    )
+    notification = await _run_repository(request, lambda repo: inputs.notify(repo, session_id))
+    if notification:
+        await runtime.publish_persisted(*notification)
+    await runtime.reconcile_once()
+    return result
+
+
+@router.post("/inputs/{input_id}")
+async def change_agent_input(
+    input_id: str,
+    payload: AgentInputChange,
+    request: Request,
+    identity: CurrentIdentity,
+    idempotency_key: IdempotencyKey = None,
+):
+    from app.persistence import inputs
+
+    key = require_idempotency_key(idempotency_key)
+    result = await _run_repository(
+        request, lambda repo: inputs.change(repo, identity, input_id, payload, key)
+    )
+    notification = await _run_repository(
+        request, lambda repo: inputs.notify(repo, result["session_id"])
+    )
+    if notification:
+        await _runtime(request).publish_persisted(*notification)
+    await _runtime(request).reconcile_once()
+    return result

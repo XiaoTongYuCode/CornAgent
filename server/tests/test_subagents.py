@@ -1021,7 +1021,8 @@ def test_production_child_adapter_uses_only_child_prompt_and_scoped_tools(settin
     assert [message["role"] for message in messages] == ["system", "user"]
     assert not any(message.get("content") == SYSTEM_PROMPT for message in messages)
     assert {tool["function"]["name"] for tool in requests[0]["tools"]} == {
-        "mock_web_search", "web_search", "read_url",
+        "search_tools", "read_skill", "read_tool_result", "list_materials",
+        "search_materials", "read_material",
     }
     assert runtime.model_client.system_prompt == SYSTEM_PROMPT
     asyncio.run(runtime.close())

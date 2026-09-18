@@ -101,6 +101,10 @@ class AgentToolExecutor:
             and (not tool.read_only or tool.runtime_handler is not None or tool.exclusive)
         ):
             return self._error("ToolScopeDenied", "当前 Agent 无权执行此工具。")
+        if context.advertised_tools is not None and name not in context.advertised_tools:
+            return self._error(
+                "ToolNotLoaded", "该工具未在本轮模型请求中加载，请先 search_tools 后在下一轮调用。"
+            )
         context.raise_if_cancelled()
         try:
             normalized_arguments = tool.validate_arguments(dict(arguments or {}))

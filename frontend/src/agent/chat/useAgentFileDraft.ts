@@ -1,3 +1,4 @@
+import { normalizeAgentFile } from '../fileFormats'
 import { useI18n } from '../../i18n'
 import { apiErrorMessage } from '../../api/transport'
 import { localizeSystemMessage } from '../../i18n/systemMessages'
@@ -134,7 +135,8 @@ export function useAgentFileDraft({
     setError(null)
     const accepted: AgentDraftFile[] = []
     let totalBytes = filesRef.current.reduce((total, file) => total + file.file.size, 0)
-    for (const file of files) {
+    for (const rawFile of files) {
+      const file = normalizeAgentFile(rawFile)
       if (filesRef.current.length + accepted.length >= capabilities.maxCount) {
         setError(`最多可添加 ${capabilities.maxCount} 个文件。`)
         break

@@ -100,6 +100,7 @@ class AgentSessionOut(BaseModel):
 class AgentSessionDetail(AgentSessionOut):
     messages: list[AgentMessageOut]
     active_run: AgentRunOut | None = None
+    inputs: list[dict[str, Any]] = Field(default_factory=list)
     next_before: str | None = None
 
 
@@ -258,3 +259,15 @@ __all__ = [
     "AgentStreamSnapshot",
     "AgentVersionSwitch",
 ]
+
+
+class AgentInputCreate(AgentRunCreate):
+    mode: Literal["queue", "steer"] = "queue"
+
+
+class AgentInputChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
+    content: str | None = Field(default=None, max_length=40_000)
+    mode: Literal["queue", "steer"] | None = None
+    cancel: bool = False

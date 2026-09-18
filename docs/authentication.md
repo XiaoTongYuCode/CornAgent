@@ -74,7 +74,7 @@ Agent 核心不依赖登录协议。系统不提供组织、管理员或角色�
 嵌入方可自建认证 UI，先建立同源登录 Cookie，再向 `CornAgentProvider` 传入稳定的 `principalKey`。
 切换用户须同步更新该键。跨域嵌入需要宿主提供自己的认证 transport，此版本内置 Cookie 方案仅支持同源。
 
-实现只参考 Cintel 的身份组合、Auth Center 的登录挑战设计，没有复制 EigenLogic 源码或依赖其服务。
+身份与登录挑战由 CornAgent 独立实现，不依赖外部身份服务。
 依赖均为公开包，Python 与前端提交锁文件。
 
 ## 验证

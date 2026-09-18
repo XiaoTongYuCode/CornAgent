@@ -7,3 +7,5 @@ export { HttpAgentTransport } from '../api/client'
 export type { CornAgentApiTransport } from '../api/transport'
 export type { AgentWorkspace } from './useAgentWorkspace'
 export type { SubagentTaskMetadata, SubagentTaskStatus } from './types'
+
+export type { AgentOperationState, AgentOperationChange, AgentOperationField, AgentOperationEvidence } from './operationEvidence'

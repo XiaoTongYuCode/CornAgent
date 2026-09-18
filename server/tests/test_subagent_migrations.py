@@ -114,6 +114,12 @@ def test_subagent_schema_fresh_install_and_upgrade(settings, tmp_path, monkeypat
         database = Database(connection_settings)
         inspector = inspect(database.engine)
         assert "cornagent_subagent_tasks" in inspector.get_table_names()
+        assert {"cornagent_agent_inputs", "cornagent_agent_input_mutations"} <= set(
+            inspector.get_table_names()
+        )
+        assert {"mode", "status", "file_ids", "version"} <= {
+            item["name"] for item in inspector.get_columns("cornagent_agent_inputs")
+        }
         assert {
             "cornagent_auth_users",
             "cornagent_auth_sessions",

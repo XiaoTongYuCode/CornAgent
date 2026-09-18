@@ -119,16 +119,12 @@ def app():
 
 `/metrics` 提供 Child 活跃数、尝试数、完成状态、编排操作及其结果、工具/provider 调用、等待恢复数、协调恢复次数，以及 `cornagent_subagent_attempt_seconds_sum/count`。数据库任务投影另提供从首次执行到终态的耗时、尝试次数、交付状态与稳定错误码。指标使用操作/状态标签，不以任务标识生成高基数标签；完整结果保存在 PostgreSQL。
 
-## 移植来源
+## 实现位置
 
-固定归档提交：`1c934f0d6ed2970f7a36eac463ab08897f071523`。
+- `server/app/agent/subagents/`：任务协议、工具定义、独立提示词与只读执行器。
+- `server/app/persistence/subagents.py`：Root 锁、完成序号、交付事务与恢复。
+- `frontend/src/agent/chat/`：聊天页和侧栏共用的任务分组、标题、图标及结果展示。
+- `server/tests/test_subagents.py` 与 `test_subagent_migrations.py`：双实例、SSE、完整交付、恢复及迁移验证。
 
-| EigenLogic 来源（相对仓库路径） | CornAgent 落点与处理 |
-| --- | --- |
-| `app/business-agent/agent_server/app/llm/subagents/{protocol,tools,runner}.py` | `server/app/agent/subagents/`，复制协议校验与提示语义，改用现有模型和工具接口 |
-| `app/business-agent/agent_server/app/services/agent/subagent_runtime.py` | Child 调度、Root 等待和最终回答检查，适配 CornAgent checkpoint/租约事务 |
-| `app/business-agent/agent_server/app/storage/{models/agent_subagent_task,repositories/agent_subagent_task_repository}.py` | `server/app/persistence/subagents.py` 与 `0002_subagents`，整合 Root 锁、完成序号和交付事务 |
-| `app/business-agent/agent_server/tests/test_subagent_*.py`、`test_agent_subagent_*.py` | `server/tests/test_subagents.py`、`test_subagent_migrations.py`，移植语义并增加双实例、SSE、完整交付回归 |
-| `app/business-agent/agent_web/src/utils/{subagentIconColor,messageRenderPlan}.ts` 及任务标题/图标组件 | `frontend/src/agent/chat/`，复制稳定配色与分组规则，适配当前主题、字典和 tool_call 部件 |
-
-未带入业务工具、业务鉴权或 EigenLogic 的部署与共享包依赖。与旧版内部实现的主要区别是复用 CornAgent 自有事务、模型、会话、SSE 及统一 React 工作区；本次对齐的是通用子任务编排能力。
+子任务复用 CornAgent 的模型适配器、数据库事务、会话、SSE 和 React 工作区。
+按需工具与技能协议见[运行时](runtime.md#按需工具与技能)。

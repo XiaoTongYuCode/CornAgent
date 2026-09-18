@@ -9,6 +9,7 @@ import type { AgentWorkspace } from '../useAgentWorkspace'
 import { MarkdownMessageContent } from './MarkdownMessageContent'
 import { AssistantMessageActions } from './MessageActions'
 import { UserMessage } from './UserMessage'
+import { TurnChanges } from './TurnChanges'
 import { projectDesktopContentParts } from './projectDesktopContentParts'
 import { getVisibleAssistantMarkdown } from './projectAgentMessageSections'
 
@@ -95,6 +96,7 @@ export function AgentMessageRow({ message, runActive, workspace }: AgentMessageR
             showLoadingWhenEmpty={showLoading}
             variant="chat"
           />
+          <TurnChanges parts={rawParts} />
           {incompleteRun && <div className="chat-message-list__run-error" role="alert">
             <strong>{t(incompleteRun.status === 'cancelled' ? 'incompleteCancelled' : 'incomplete')}</strong>
             <span>{incompleteRun.errorMessage ? localizeSystemMessage(incompleteRun.errorMessage, locale) : (incompleteRun.status === 'cancelled'

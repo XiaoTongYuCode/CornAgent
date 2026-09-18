@@ -224,7 +224,8 @@ def build_file_tools(open_service: AgentServiceFactory, reader=None) -> tuple[To
         ToolDefinition(
             name=READ_FILE_TOOL_NAME,
             description=(
-                "按 file_id 读取当前会话 PDF。指定 page_numbers（从 1 开始）"
+                "按 file_id 读取当前会话 PDF、TXT、Markdown、CSV、TSV、DOCX。"
+                "仅 PDF 支持 page_numbers（从 1 开始）"
                 "读取逐页 Markdown 与内嵌图片，"
                 "适合扫描件和图表；不指定页码则按 cursor/max_chars 读取已提取文本。"
                 "page_numbers 与非空 cursor 不能同时使用。"
@@ -241,6 +242,7 @@ def build_file_tools(open_service: AgentServiceFactory, reader=None) -> tuple[To
             result_model=ReadFileResult,
             result_presenter=_present_read_file,
             private_result=True,
+            read_only=True,
             result_projector=_project_read_file,
         ),
     )

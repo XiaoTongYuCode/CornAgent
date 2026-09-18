@@ -148,10 +148,16 @@ def create_app(
         fallback_supports_images=settings.agent_fallback_supports_images,
         file_store=store,
         file_input_enabled=settings.agent_file_input_enabled,
+        file_max_count=settings.agent_file_max_count,
+        file_max_total_bytes=settings.agent_file_max_total_bytes,
+        file_pdf_max_count=settings.agent_file_pdf_max_count,
         image_hydration_max_count=settings.agent_file_image_hydration_max_count,
         image_hydration_max_bytes=settings.agent_file_image_hydration_max_bytes,
         context_checkpoint_trigger_ratio=settings.agent_context_checkpoint_trigger_ratio,
         context_summary_max_tokens=settings.agent_context_summary_max_tokens,
+        context_window_tokens=settings.agent_context_window_tokens,
+        fallback_context_window_tokens=settings.agent_fallback_context_window_tokens,
+        output_max_tokens=settings.agent_output_max_tokens,
     )
     rate_limiter = AgentRunRateLimiter(
         redis_url=settings.redis_url,

@@ -237,10 +237,11 @@ def test_real_runtime_emits_model_and_tool_metrics(client_factory, settings, mon
     settings.telemetry_enabled = True
 
     async def provider(**kwargs):
-        has_tool = any(m.get("role") == "tool" for m in kwargs["messages"])
+        tool_count = sum(m.get("role") == "tool" for m in kwargs["messages"])
+        tool_name = "search_tools" if tool_count == 0 else "mock_web_search"
 
         async def chunks():
-            if has_tool:
+            if tool_count >= 2:
                 yield {
                     "choices": [{"delta": {"content": "done"}, "finish_reason": "stop"}],
                     "usage": {"prompt_tokens": 10, "completion_tokens": 2},
@@ -253,10 +254,13 @@ def test_real_runtime_emits_model_and_tool_metrics(client_factory, settings, mon
                                 "tool_calls": [
                                     {
                                         "index": 0,
-                                        "id": "search-1",
+                                        "id": f"search-{tool_count}",
                                         "function": {
-                                            "name": "mock_web_search",
-                                            "arguments": '{"query":"test"}',
+                                            "name": tool_name,
+                                            "arguments": (
+                                                '{"query":"mock_web_search"}'
+                                                if tool_count == 0 else '{"query":"test"}'
+                                            ),
                                         },
                                     }
                                 ]
@@ -276,10 +280,10 @@ def test_real_runtime_emits_model_and_tool_metrics(client_factory, settings, mon
         wait_run(client, created["session"]["id"])
         client.app.state.telemetry.events.join()
         data = client.get("/api/v1/agent/usage").json()
-        assert data["models"][0]["calls"] == 2
-        assert data["models"][0]["inputTokens"] == 18
-        assert data["tools"][0]["name"] == "mock_web_search"
-        assert data["tools"][0]["calls"] == 1
+        assert data["models"][0]["calls"] == 3
+        assert data["models"][0]["inputTokens"] == 26
+        tool_counts = {tool["name"]: tool["calls"] for tool in data["tools"]}
+        assert tool_counts == {"search_tools": 1, "mock_web_search": 1}
         assert data["totalRuns"] == 1
 
 

@@ -2,6 +2,7 @@
 @import './styles/foundation/base.css';
 @import './styles/components/agent-primitives.css';
 @import './styles/components/agent.css';
+@import './styles/components/agent-turn-changes.css';
 @import './styles/components/agent-chat-content.css';
 @import './styles/components/agent-chat-collapsible.css';
 @import './styles/components/agent-prompt-panel.css';

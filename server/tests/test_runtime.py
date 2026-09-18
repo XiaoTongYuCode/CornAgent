@@ -466,7 +466,7 @@ def test_context_compaction_uses_a_dedicated_json_system_prompt(
     assert requests[0]["stream"] is False
 
 
-def test_context_compaction_projects_private_files_to_text_only() -> None:
+def test_context_compaction_preserves_user_file_references() -> None:
     observed: list[list[dict[str, Any]]] = []
 
     class RecordingCompactor:
@@ -509,10 +509,10 @@ def test_context_compaction_projects_private_files_to_text_only() -> None:
 
     assert observed
     serialized = json.dumps(observed, ensure_ascii=False)
-    assert "[历史文件：候选人.png]" in serialized
+    assert compacted[0] == messages[0]
     assert "cintel_file_ref" not in serialized
     assert "file-private" not in serialized
-    assert compacted[0]["role"] == "system"
+    assert compacted[1]["role"] == "system"
 
 
 def test_provider_overflow_compaction_retains_private_tool_evidence_references() -> None:
@@ -564,6 +564,7 @@ def test_provider_overflow_compaction_retains_private_tool_evidence_references()
         {"role": "user", "content": "需要压缩的普通历史" * 2_000},
         *private_unit,
         *({"role": "assistant", "content": f"tail-{index}"} for index in range(4)),
+        {"role": "user", "content": "current task"},
     ]
 
     compacted, metadata = asyncio.run(
@@ -658,7 +659,8 @@ def test_context_compaction_recursively_splits_provider_overflow() -> None:
 
     assert attempted_sizes[0] > 1_500
     assert successful_sizes and max(successful_sizes) <= 1_500
-    assert len(compacted) == 5
+    assert len(compacted) < len(messages)
+    assert compacted[-1] == messages[-1]
     assert compacted[0]["role"] == "system"
     assert metadata is not None and metadata["passes"] == 1
 
@@ -696,7 +698,8 @@ def test_context_compaction_splits_one_oversized_history_unit() -> None:
     )
 
     assert successful_sizes and max(successful_sizes) <= 1_200
-    assert len(compacted) == 5
+    assert len(compacted) < len(messages)
+    assert compacted[-1] == messages[-1]
     assert metadata is not None and metadata["passes"] == 1
 
 

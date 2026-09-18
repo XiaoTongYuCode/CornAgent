@@ -80,3 +80,33 @@ def parse_pdf(
         }
         raise DomainError(code, messages.get(code, "PDF extraction failed."), status_code=422)
     return result
+
+
+def extract_document(
+    payload: bytes, *, mime_type: str, max_pages: int, max_chars: int, timeout_seconds: float
+) -> PdfExtraction:
+    if mime_type == "application/pdf":
+        return extract_pdf(
+            payload, max_pages=max_pages, max_chars=max_chars, timeout_seconds=timeout_seconds
+        )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "app.document_parser", mime_type, str(max_chars)],
+            input=payload,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=timeout_seconds,
+        )
+        result = json.loads(completed.stdout)
+        if completed.returncode or result.get("ok") is not True:
+            raise ValueError("Invalid document")
+        return PdfExtraction(**{key: result[key] for key in PdfExtraction.__dataclass_fields__})
+    except subprocess.TimeoutExpired as exc:
+        raise DomainError(
+            "session_file_extraction_timeout", "Document extraction timed out.", status_code=422
+        ) from exc
+    except (ValueError, KeyError) as exc:
+        raise DomainError(
+            "session_file_extraction_failed", "Document extraction failed.", status_code=422
+        ) from exc

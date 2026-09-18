@@ -1,7 +1,7 @@
 import { createClientId } from '../client-id'
 import type { CornAgentApiTransport } from '../api/transport'
 import { parseAgentSse } from './sse'
-import type { AgentContentPart, AgentFile, AgentFileInputCapabilities, AgentFileMimeType, AgentMessage, AgentQuestionResponse, AgentRun, AgentSession, AgentSessionDetail, AgentSnapshot, AgentSseEvent, AgentUploadedFile } from './types'
+import type { AgentInput, AgentContentPart, AgentFile, AgentFileInputCapabilities, AgentFileMimeType, AgentMessage, AgentQuestionResponse, AgentRun, AgentSession, AgentSessionDetail, AgentSnapshot, AgentSseEvent, AgentUploadedFile } from './types'
 
 interface BackendFile {
   file_id: string; filename: string; mime_type: AgentFileMimeType; size_bytes: number; content_url: string
@@ -28,7 +28,7 @@ interface BackendSession {
   created_at: string; updated_at: string
 }
 interface BackendSessionDetail extends BackendSession {
-  messages: BackendMessage[]; active_run: BackendRun | null; next_before: string | null
+  inputs?: AgentInput[]; messages: BackendMessage[]; active_run: BackendRun | null; next_before: string | null
 }
 interface BackendSessionRun { session: BackendSession; run: BackendRun }
 interface BackendSnapshot {
@@ -85,6 +85,7 @@ const toDetail = (
   messages: session.messages.map((message) => toMessage(message, resolveProtectedUrl)),
   activeRun: session.active_run ? toRun(session.active_run) : null,
   nextBefore: session.next_before,
+  inputs: session.inputs ?? [],
 })
 export const toSnapshot = (snapshot: BackendSnapshot): AgentSnapshot => ({
   run: toRun(snapshot.run), draftMarkdown: snapshot.draft_markdown,
@@ -147,6 +148,16 @@ export class HttpAgentGateway {
   async startRun(sessionId: string, content: string, fileIds: string[] = [], signal?: AbortSignal) {
     return toRun(await this.api.mutate<BackendRun>(`/agent/sessions/${encodeURIComponent(sessionId)}/messages`, { body: { content, attachments: fileIds.map((file_id) => ({ file_id })) } }, false, signal))
   }
+  async queueInput(sessionId: string, content: string, fileIds: string[], mode: 'queue' | 'steer') {
+    return this.api.mutate<AgentInput>(`/agent/sessions/${encodeURIComponent(sessionId)}/inputs`, {
+      body: { content, mode, attachments: fileIds.map(file_id => ({ file_id })) },
+    })
+  }
+  async changeInput(input: AgentInput, patch: { content?: string; mode?: 'queue' | 'steer'; cancel?: boolean }) {
+    return this.api.mutate<AgentInput>(`/agent/inputs/${encodeURIComponent(input.id)}`, {
+      body: { ...patch, version: input.version },
+    })
+  }
   async regenerate(messageId: string) {
     return toRun(await this.api.mutate<BackendRun>(`/agent/messages/${encodeURIComponent(messageId)}/regenerate`, { body: {} }))
   }
@@ -180,7 +191,7 @@ export class HttpAgentGateway {
       rawBody: file,
       contentType: file.type || 'application/octet-stream',
     }, false, signal)
-    const completed = stored.mime_type === 'application/pdf'
+    const completed = !stored.mime_type.startsWith('image/')
       ? await (async () => {
         onPhase?.('processing')
         return this.api.mutate<typeof stored>(`/files/${encodeURIComponent(stored.id)}/extract`, {
@@ -198,9 +209,9 @@ export class HttpAgentGateway {
         `/api/v1/files/${encodeURIComponent(completed.id)}/content`,
       ),
       scope: 'session',
-      mediaKind: completed.mime_type === 'application/pdf' ? 'document' : 'image',
+      mediaKind: !completed.mime_type.startsWith('image/') ? 'document' : 'image',
       inspectionStatus: 'validated',
-      extractionStatus: completed.mime_type === 'application/pdf' ? 'ready' : 'not_requested',
+      extractionStatus: !completed.mime_type.startsWith('image/') ? 'ready' : 'not_requested',
     }
   }
   async deleteFile(fileId: string, signal?: AbortSignal) {

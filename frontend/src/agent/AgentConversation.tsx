@@ -1,3 +1,7 @@
+import { apiErrorMessage } from '../api/transport'
+import { AgentInputQueue } from './AgentInputQueue'
+import type { AgentInput } from './types'
+import { ListEnd } from 'lucide-react'
 import { localizeSystemMessage } from '../i18n/systemMessages'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createClientId } from '../client-id'
@@ -13,6 +17,14 @@ import type { AgentWorkspace } from './useAgentWorkspace'
 
 export function AgentConversation({ workspace, userName, focusPrompt = false, onSessionChange, emptyStateFooter }: { workspace: AgentWorkspace; emptyStateFooter?: ReactNode; userName?: string; focusPrompt?: boolean; onSessionChange?: (sessionId: string) => void }) {
   const { locale, t } = useI18n()
+  const beforeEditDraft = useRef('')
+  const submitInFlight = useRef(false)
+  const [editingInput, setEditingInput] = useState<AgentInput | null>(null)
+  const [sendingInput, setSendingInput] = useState(false)
+  const [inputError, setInputError] = useState<string | null>(null)
+  const currentRevision = useRef(workspace.draftRevisionKey)
+  useEffect(() => { currentRevision.current = workspace.draftRevisionKey }, [workspace.draftRevisionKey])
+  const currentEdit = editingInput?.session_id === workspace.session?.id ? editingInput : null
   const [draftState, setDraftState] = useState({ key: workspace.draftRevisionKey, value: '' })
   const draft = draftState.key === workspace.draftRevisionKey ? draftState.value : ''
   const setDraft = (value: string) => setDraftState({ key: workspace.draftRevisionKey, value })
@@ -46,16 +58,33 @@ export function AgentConversation({ workspace, userName, focusPrompt = false, on
     return () => window.cancelAnimationFrame(frame)
   }, [active, focusPrompt, promptFocusable, workspace.draftRevisionKey])
 
-  const submit = async (content: string, fileIds: string[]) => {
-    if ((!content && fileIds.length === 0) || active || workspace.busy) return
+  const submit = async (content: string, fileIds: string[], mode: 'queue' | 'steer' = 'queue') => {
+    if ((!content && fileIds.length === 0 && !currentEdit?.file_ids.length) || workspace.busy || submitInFlight.current) return false
+    submitInFlight.current = true
+    const revision = workspace.draftRevisionKey
+    setSendingInput(true)
+    setInputError(null)
     try {
-      const sessionId = await workspace.send(content, fileIds)
-      onSessionChange?.(sessionId)
-      setDraft('')
-      fileDraft.clearAfterSubmit()
+      if (currentEdit) {
+        await workspace.changeInput(currentEdit, { content })
+        setEditingInput(null)
+      } else if (active) {
+        await workspace.queueInput(content, fileIds, mode)
+      } else {
+        const sessionId = await workspace.send(content, fileIds)
+        onSessionChange?.(sessionId)
+      }
+      if (revision === currentRevision.current) {
+        setDraft(currentEdit ? beforeEditDraft.current : '')
+        if (!currentEdit) fileDraft.clearAfterSubmit()
+      }
       return true
-    } catch {
+    } catch (reason) {
+      setInputError(apiErrorMessage(reason, t('inputFailed')))
       return false
+    } finally {
+      submitInFlight.current = false
+      setSendingInput(false)
     }
   }
   const respond = async (response: AgentChatUserQuestionResponse) => {
@@ -79,15 +108,21 @@ export function AgentConversation({ workspace, userName, focusPrompt = false, on
     onChange={setDraft}
     onStartResearch={({ prompt: nextPrompt, fileIds }) => submit(nextPrompt, fileIds)}
     onStop={workspace.cancel}
-    placeholder={t(active ? 'agentWorking' : 'askAnything')}
-    disabled={active || workspace.busy}
+    stopWhenEmpty={active && !currentEdit}
+    onAlternateSubmit={active ? ({ prompt, fileIds }) => submit(prompt, fileIds, 'steer') : undefined}
+    submitIcon={active ? <ListEnd size={16} /> : undefined}
+    submitTooltip={active ? t('queueHint') : undefined}
+    maxLength={40000}
+    placeholder={t(active ? 'queuePlaceholder' : 'askAnything')}
+    disabled={workspace.busy || sendingInput}
     fileAccept={workspace.fileInput?.accepts.map((item) => item.mimeType).join(',')}
     fileError={fileDraft.error}
-    fileFailed={fileDraft.failed}
-    fileInputEnabled={workspace.fileInput?.enabled}
-    files={fileDraft.files}
-    fileProcessing={fileDraft.processing}
-    loading={active}
+    fileFailed={!currentEdit && fileDraft.failed}
+    fileInputEnabled={workspace.fileInput?.enabled && !currentEdit}
+    files={currentEdit ? [] : fileDraft.files}
+    hasExistingFiles={Boolean(currentEdit?.file_ids.length)}
+    fileProcessing={!currentEdit && fileDraft.processing}
+    loading={false}
     onAddFiles={fileDraft.addFiles}
     textareaRows={2}
     onRemoveFile={fileDraft.removeFile}
@@ -95,7 +130,7 @@ export function AgentConversation({ workspace, userName, focusPrompt = false, on
   />
 
   return <section className={`agent-conversation${emptyConversation ? ' agent-conversation--empty' : ''}`} aria-label={t('conversation')}>
-    {workspace.error && <div className="agent-error-banner" role="alert">{localizeSystemMessage(workspace.error, locale)}</div>}
+    {(inputError || workspace.error) && <div className="agent-error-banner" role="alert">{localizeSystemMessage(inputError || workspace.error || '', locale)}</div>}
     {workspace.available === false
       ? <div className="agent-empty-state"><h2>{t('unavailable')}</h2><p>{t(workspace.unavailableReason === 'model_not_configured' ? 'modelNotConfigured' : workspace.unavailableReason === 'event_stream_not_configured' ? 'eventStreamNotConfigured' : 'unavailableHelp')}</p></div>
       : emptyConversation
@@ -108,14 +143,25 @@ export function AgentConversation({ workspace, userName, focusPrompt = false, on
           {emptyStateFooter}
         </div>
         : <AgentMessageList workspace={workspace} />}
-    {workspace.available !== false && !emptyConversation && pendingQuestion && <div className="agent-question-composer">
+    {workspace.available !== false && !emptyConversation && <div className="agent-conversation-input">
+    {pendingQuestion && <div className="agent-question-composer">
       <UserQuestionPart
         display="composer"
         onRespondUserQuestion={respond}
         part={{ ...pendingQuestion, kind: 'user_question', metadata: pendingQuestion.metadata ? { ...pendingQuestion.metadata } : null }}
       />
     </div>}
-    {workspace.available !== false && !emptyConversation && !pendingQuestion && prompt}
+      <AgentInputQueue workspace={workspace} disabled={sendingInput || Boolean(currentEdit)} onEdit={async input => {
+        beforeEditDraft.current = draft
+        setEditingInput(input)
+        setDraft(input.content)
+        promptRef.current?.focus()
+      }} />
+      {currentEdit && <div className="agent-input-editing">{t('editingQueuedMessage')}
+        <button onClick={() => { setEditingInput(null); setDraft(beforeEditDraft.current) }}>{t('cancel')}</button>
+      </div>}
+      {prompt}
+    </div>}
   </section>
 }
 
