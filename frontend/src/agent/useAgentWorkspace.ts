@@ -562,22 +562,25 @@ export function useAgentWorkspace(
     return () => window.clearInterval(timer)
   }, [session?.id, session?.inputs?.length, session?.activeRun?.id, refreshSession])
 
+  const regenerate = useCallback((messageId: string) => {
+    const expectedSessionId = session?.id
+    if (!gateway || !expectedSessionId) return Promise.resolve()
+    return runVersionAction(expectedSessionId, () => gateway.regenerate(messageId))
+  }, [gateway, runVersionAction, session?.id])
+
+  const edit = useCallback((messageId: string, content: string) => {
+    const expectedSessionId = session?.id
+    if (!gateway || !expectedSessionId) return Promise.resolve()
+    return runVersionAction(expectedSessionId, () => gateway.edit(messageId, content))
+  }, [gateway, runVersionAction, session?.id])
+
   return useMemo(() => ({
     queueInput, changeInput, open, available, unavailableReason, fileInput, draftRevisionKey: `${principalKey}:${session?.id ?? 'new'}`, sessions, session, snapshot, busy, loadingOlder, loadingMoreSessions,
     sessionsNextCursor, error, setOpen, ask, send: start, newSession, selectSession,
     deleteSession, uploadFile, deleteFile, loadMoreSessions, searchSessions, loadOlder, respond, cancel,
-    regenerate: (messageId: string) => {
-      const expectedSessionId = session?.id
-      if (!gateway || !expectedSessionId) return Promise.resolve()
-      return runVersionAction(expectedSessionId, () => gateway.regenerate(messageId))
-    },
-    edit: (messageId: string, content: string) => {
-      const expectedSessionId = session?.id
-      if (!gateway || !expectedSessionId) return Promise.resolve()
-      return runVersionAction(expectedSessionId, () => gateway.edit(messageId, content))
-    },
+    regenerate, edit,
     switchVersion: switchMessageVersion,
-  }), [queueInput, changeInput, available, unavailableReason, ask, busy, cancel, deleteFile, deleteSession, error, fileInput, gateway, loadMoreSessions, loadOlder, loadingMoreSessions, loadingOlder, newSession, open, principalKey, respond, runVersionAction, searchSessions, selectSession, session, sessions, sessionsNextCursor, snapshot, start, switchMessageVersion, uploadFile])
+  }), [queueInput, changeInput, available, unavailableReason, ask, busy, cancel, deleteFile, deleteSession, edit, error, fileInput, loadMoreSessions, loadOlder, loadingMoreSessions, loadingOlder, newSession, open, principalKey, regenerate, respond, searchSessions, selectSession, session, sessions, sessionsNextCursor, snapshot, start, switchMessageVersion, uploadFile])
 }
 
 export function applyEvent(

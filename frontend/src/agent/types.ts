@@ -140,7 +140,7 @@ export function questionMetadata(part: AgentContentPart): AgentQuestionMetadata 
   return metadata as AgentQuestionMetadata
 }
 
-export function activeLineage(session: AgentSessionDetail | null): AgentMessage[] {
+export function activeLineage(session: Pick<AgentSessionDetail, 'messages' | 'activeLeafMessageId'> | null): AgentMessage[] {
   if (!session?.activeLeafMessageId) return []
   const byId = new Map(session.messages.map((message) => [message.id, message]))
   const lineage: AgentMessage[] = []

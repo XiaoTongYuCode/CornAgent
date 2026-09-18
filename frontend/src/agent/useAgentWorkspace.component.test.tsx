@@ -551,3 +551,91 @@ it('discards a created Run response after the principal changes', async () => {
   expect(hook.result.current.session).toBeNull()
   expect(hook.result.current.busy).toBe(false)
 })
+
+it('keeps message action callbacks stable across streaming deltas', async () => {
+  const activeRun = run('run-streaming', 'session-streaming')
+  const detail = session(activeRun.sessionId, activeRun)
+  const delta = deferred<AgentSseEvent>()
+  const gateway = {
+    status: vi.fn(async () => ({ available: true })),
+    listSessions: vi.fn(async () => ({ data: [], nextCursor: null })),
+    getSession: vi.fn(async () => detail),
+    stream: async function* (_id: string, signal: AbortSignal) {
+      yield snapshotEvent(activeRun)
+      yield await delta.promise
+      await new Promise<void>((resolve) =>
+        signal.addEventListener('abort', () => resolve(), { once: true }),
+      )
+    },
+  } as unknown as HttpAgentGateway
+  const hook = renderHook(() =>
+    useAgentWorkspace(gateway, 'principal-1', detail.id),
+  )
+  await waitFor(() =>
+    expect(hook.result.current.snapshot?.run.id).toBe(activeRun.id),
+  )
+  const previous = hook.result.current
+  await act(async () => {
+    delta.resolve({
+      id: '1:1',
+      event: 'delta',
+      data: { content: '新的回答', part_id: 'answer' },
+    })
+  })
+  await waitFor(() =>
+    expect(hook.result.current.snapshot?.draftMarkdown).toBe('新的回答'),
+  )
+  expect(hook.result.current.regenerate).toBe(previous.regenerate)
+  expect(hook.result.current.edit).toBe(previous.edit)
+  expect(hook.result.current.switchVersion).toBe(previous.switchVersion)
+})
+
+it.each(['regenerate', 'edit'] as const)(
+  'uses the current session for %s after navigation',
+  async (action) => {
+    const completedRun = (id: string, sessionId: string) => ({
+      ...run(id, sessionId),
+      status: 'completed' as const,
+    })
+    const sessionA = session('session-a', completedRun('run-a', 'session-a'))
+    let sessionB = session('session-b', completedRun('run-b', 'session-b'))
+    const nextRun = completedRun(`run-${action}`, sessionB.id)
+    const mutate = vi.fn(async () => {
+      sessionB = session(sessionB.id, nextRun)
+      return nextRun
+    })
+    const getSession = vi.fn(async (id: string) =>
+      id === sessionA.id ? sessionA : sessionB,
+    )
+    const gateway = {
+      status: vi.fn(async () => ({ available: true })),
+      listSessions: vi.fn(async () => ({ data: [], nextCursor: null })),
+      getSession,
+      [action]: mutate,
+    } as unknown as HttpAgentGateway
+    const hook = renderHook(
+      ({ id }: { id: string }) => useAgentWorkspace(gateway, 'principal-1', id),
+      { initialProps: { id: sessionA.id } },
+    )
+    await waitFor(() =>
+      expect(hook.result.current.session?.id).toBe(sessionA.id),
+    )
+    hook.rerender({ id: sessionB.id })
+    await waitFor(() =>
+      expect(hook.result.current.session?.id).toBe(sessionB.id),
+    )
+    const target = sessionB.messages[action === 'edit' ? 0 : 1]
+    await act(() =>
+      action === 'edit'
+        ? hook.result.current.edit(target.id, '修改后的问题')
+        : hook.result.current.regenerate(target.id),
+    )
+    expect(mutate.mock.calls[0]).toEqual(
+      action === 'edit' ? [target.id, '修改后的问题'] : [target.id],
+    )
+    expect(getSession).toHaveBeenLastCalledWith(sessionB.id)
+    expect(hook.result.current.session?.activeLeafMessageId).toBe(
+      nextRun.assistantMessageId,
+    )
+  },
+)

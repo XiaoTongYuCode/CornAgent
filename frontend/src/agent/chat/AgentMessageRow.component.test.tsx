@@ -42,6 +42,11 @@ function assistantWorkspace(): AgentWorkspace {
   } as unknown as AgentWorkspace
 }
 
+function rowActions() {
+  const workspace = assistantWorkspace()
+  return { onEdit: workspace.edit, onRegenerate: workspace.regenerate, onSwitch: workspace.switchVersion }
+}
+
 it('marks a cancelled partial answer as incomplete', () => {
   const run: AgentRun = {
     id: 'run-cancelled',
@@ -85,7 +90,7 @@ it('marks a cancelled partial answer as incomplete', () => {
     switchVersion: vi.fn(async () => undefined),
   } as unknown as AgentWorkspace
 
-  render(<AgentMessageRow message={message} runActive={false} workspace={workspace} />)
+  render(<AgentMessageRow message={message} run={null} snapshot={null} disabled={false} onEdit={workspace.edit} onRegenerate={workspace.regenerate} onSwitch={workspace.switchVersion} />)
 
   expect(screen.getByRole('alert')).toHaveTextContent('本次生成未完成（已取消）')
   expect(screen.getByRole('alert')).toHaveTextContent('以上内容可能不完整')
@@ -132,7 +137,7 @@ it('renders authenticated historical files and opens image preview or PDF', asyn
     switchVersion: vi.fn(async () => undefined),
   } as unknown as AgentWorkspace
 
-  render(<AgentMessageRow message={message} runActive={false} workspace={workspace} />)
+  render(<AgentMessageRow message={message} run={null} snapshot={null} disabled={false} onEdit={workspace.edit} onRegenerate={workspace.regenerate} onSwitch={workspace.switchVersion} />)
 
   expect(screen.getByRole('img')).toHaveAttribute('src', '/api/v1/files/file-a/content')
   expect(screen.getByRole('link', { name: '打开 brief.pdf' })).toHaveAttribute(
@@ -151,8 +156,8 @@ it('keeps a static processed heading for a body-only answer with process timing'
       message={assistantMessage([
         { id: 'body-1', kind: 'markdown', content: '第一段。\n\n第二段。' },
       ])}
-      runActive={false}
-      workspace={assistantWorkspace()}
+      run={null} snapshot={null} disabled={false}
+      {...rowActions()}
     />,
   )
 
@@ -167,8 +172,8 @@ it('keeps a completed process expanded when no renderable answer follows it', as
       { id: 'tool-1', kind: 'tool_call', title: '读取附件', content: '已读取。' },
       { id: 'body-1', kind: 'markdown', content: '  \n ' },
     ])}
-    runActive={false}
-    workspace={assistantWorkspace()}
+    run={null} snapshot={null} disabled={false}
+    {...rowActions()}
   />)
   const toggle = screen.getByRole('button', { name: /^用时/u })
   expect(toggle).toHaveAttribute('aria-expanded', 'true')
@@ -184,7 +189,7 @@ it('allows process collapse only while a rendered answer is present', () => {
     { id: 'tool-1', kind: 'tool_call', title: '读取附件', content: '已读取。' },
   ]
   const renderRow = (parts: AgentMessage['contentParts']) => <AgentMessageRow
-    message={assistantMessage(parts)} runActive={false} workspace={workspace}
+    message={assistantMessage(parts)} run={null} snapshot={null} disabled={false} onEdit={workspace.edit} onRegenerate={workspace.regenerate} onSwitch={workspace.switchVersion}
   />
   const { rerender } = render(renderRow(process))
   const toggle = screen.getByRole('button', { name: /^用时/u })
@@ -208,8 +213,8 @@ it('keeps only the latest body visible and collapses again at a new body boundar
   const { rerender } = render(
     <AgentMessageRow
       message={assistantMessage(initialParts)}
-      runActive={false}
-      workspace={workspace}
+      run={null} snapshot={null} disabled={false}
+      onEdit={workspace.edit} onRegenerate={workspace.regenerate} onSwitch={workspace.switchVersion}
     />,
   )
 
@@ -227,8 +232,8 @@ it('keeps only the latest body visible and collapses again at a new body boundar
         ...initialParts.slice(0, 2),
         { id: 'body-2', kind: 'markdown', content: '公司已创建，正在补充详情。' },
       ])}
-      runActive={false}
-      workspace={workspace}
+      run={null} snapshot={null} disabled={false}
+      onEdit={workspace.edit} onRegenerate={workspace.regenerate} onSwitch={workspace.switchVersion}
     />,
   )
   expect(processedToggle).toHaveAttribute('aria-expanded', 'true')
@@ -240,8 +245,8 @@ it('keeps only the latest body visible and collapses again at a new body boundar
         { id: 'tool-2', kind: 'tool_call', title: '更新记录', content: '更新完成。' },
         { id: 'body-3', kind: 'markdown', content: '资料已经补齐。' },
       ])}
-      runActive={false}
-      workspace={workspace}
+      run={null} snapshot={null} disabled={false}
+      onEdit={workspace.edit} onRegenerate={workspace.regenerate} onSwitch={workspace.switchVersion}
     />,
   )
 

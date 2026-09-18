@@ -1,10 +1,10 @@
 import { localizeSystemMessage } from '../../i18n/systemMessages'
 import { useI18n } from '../../i18n'
 import { ChatItem, LoadingDots } from '@lobehub/ui/chat'
-import { useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 
 import { celebrateAgentOutput } from '../agentCelebration'
-import type { AgentMessage } from '../types'
+import type { AgentMessage, AgentRun, AgentSnapshot } from '../types'
 import type { AgentWorkspace } from '../useAgentWorkspace'
 import { MarkdownMessageContent } from './MarkdownMessageContent'
 import { AssistantMessageActions } from './MessageActions'
@@ -15,21 +15,19 @@ import { getVisibleAssistantMarkdown } from './projectAgentMessageSections'
 
 interface AgentMessageRowProps {
   message: AgentMessage
-  runActive: boolean
-  workspace: AgentWorkspace
+  run: AgentRun | null
+  snapshot: AgentSnapshot | null
+  disabled: boolean
+  onEdit: AgentWorkspace['edit']
+  onRegenerate: AgentWorkspace['regenerate']
+  onSwitch: AgentWorkspace['switchVersion']
 }
 
-export function AgentMessageRow({ message, runActive, workspace }: AgentMessageRowProps) {
+export const AgentMessageRow = memo(function AgentMessageRow({ message, run, snapshot, disabled, onEdit, onRegenerate, onSwitch }: AgentMessageRowProps) {
   const { t, locale } = useI18n()
-  const currentRun = workspace.snapshot?.run ?? workspace.session?.activeRun
-  const runningThisMessage = currentRun?.assistantMessageId === message.id
-  const streaming = Boolean(runningThisMessage && runActive)
-  const content = runningThisMessage && workspace.snapshot
-    ? workspace.snapshot.draftMarkdown
-    : message.markdown
-  const rawParts = runningThisMessage && workspace.snapshot
-    ? workspace.snapshot.contentParts
-    : message.contentParts
+  const streaming = Boolean(run && !['completed', 'failed', 'cancelled'].includes(run.status))
+  const content = snapshot?.draftMarkdown ?? message.markdown
+  const rawParts = snapshot?.contentParts ?? message.contentParts
   const parts = useMemo(
     () => projectDesktopContentParts(rawParts),
     [rawParts],
@@ -48,15 +46,14 @@ export function AgentMessageRow({ message, runActive, workspace }: AgentMessageR
   useEffect(() => {
     const justCompleted = wasStreaming.current
       && !streaming
-      && runningThisMessage
-      && currentRun?.status === 'completed'
+      && run?.status === 'completed'
     wasStreaming.current = streaming
     if (!justCompleted || !copyContent.includes('🎉')) return
     return celebrateAgentOutput()
-  }, [copyContent, currentRun?.id, currentRun?.status, runningThisMessage, streaming])
+  }, [copyContent, run?.id, run?.status, streaming])
 
   if (message.role === 'user') {
-    return <UserMessage message={message} disabled={Boolean(workspace.busy || runActive)} workspace={workspace} />
+    return <UserMessage message={message} disabled={disabled} workspace={{ edit: onEdit, switchVersion: onSwitch }} />
   }
 
   return (
@@ -71,9 +68,9 @@ export function AgentMessageRow({ message, runActive, workspace }: AgentMessageR
             <AssistantMessageActions
               copyContent={copyContent}
               message={message}
-              disabled={Boolean(workspace.busy || runActive)}
-              onRegenerate={() => workspace.regenerate(message.id)}
-              onSwitch={workspace.switchVersion}
+              disabled={disabled}
+              onRegenerate={() => onRegenerate(message.id)}
+              onSwitch={onSwitch}
             />
           </div>
         ) : undefined}
@@ -91,7 +88,7 @@ export function AgentMessageRow({ message, runActive, workspace }: AgentMessageR
             isProcessActive={isProcessActive}
             processSessionEndedAt={message.processCompletedAt}
             processSessionStartedAt={message.processStartedAt}
-            reasoningContent={runningThisMessage ? workspace.snapshot?.reasoningMarkdown : null}
+            reasoningContent={snapshot?.reasoningMarkdown ?? null}
             reasoningTitle={isProcessActive ? '正在思考' : null}
             showLoadingWhenEmpty={showLoading}
             variant="chat"
@@ -113,4 +110,4 @@ export function AgentMessageRow({ message, runActive, workspace }: AgentMessageR
       />
     </section>
   )
-}
+})
