@@ -55,6 +55,7 @@ export const messages = {
   projectLinks: ['项目资源', 'Project resources'],
   projectQuickStart: ['快速开始', 'Quick start'],
   projectIntegration: ['嵌入你的应用', 'Embed in your app'],
+  projectListingBadge: ['CornAgent 徽章', 'CornAgent badge'],
   usageTitle: ['全站统计', 'Site-wide analytics'],
   usageSubtitle: ['让每一次探索，都清晰可见。', 'A clearer picture of every exploration.'],
   usageScope: ['全站 · UTC', 'Site-wide · UTC'],

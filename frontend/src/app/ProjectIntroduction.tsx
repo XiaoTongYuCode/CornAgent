@@ -23,6 +23,9 @@ export function ProjectIntroduction({
         {compact ? <ProjectContactLinks /> : <a href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer">GitHub</a>}
         <a href={`${REPOSITORY_URL}#quick-start`} target="_blank" rel="noopener noreferrer">{translate(locale, 'projectQuickStart')}</a>
         <a href={`${REPOSITORY_URL}/blob/main/docs/frontend-integration.md`} target="_blank" rel="noopener noreferrer">{translate(locale, 'projectIntegration')}</a>
+        <a className="project-listing-badge" href="https://aiagentslisting.com/cornagent">
+          <img src="https://aiagentslisting.com/cornagent/badge.svg?theme=light" alt={translate(locale, 'projectListingBadge')} width="200" height="50" loading="lazy" />
+        </a>
       </nav>}
     </section>
   )
