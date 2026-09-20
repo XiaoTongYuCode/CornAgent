@@ -93,7 +93,7 @@ export const AgentMessageRow = memo(function AgentMessageRow({ message, run, sna
             showLoadingWhenEmpty={showLoading}
             variant="chat"
           />
-          <TurnChanges parts={rawParts} />
+          {!hasPendingQuestion && <TurnChanges parts={rawParts} />}
           {incompleteRun && <div className="chat-message-list__run-error" role="alert">
             <strong>{t(incompleteRun.status === 'cancelled' ? 'incompleteCancelled' : 'incomplete')}</strong>
             <span>{incompleteRun.errorMessage ? localizeSystemMessage(incompleteRun.errorMessage, locale) : (incompleteRun.status === 'cancelled'

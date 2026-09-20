@@ -151,16 +151,18 @@ export function AgentConversation({ workspace, userName, focusPrompt = false, on
         part={{ ...pendingQuestion, kind: 'user_question', metadata: pendingQuestion.metadata ? { ...pendingQuestion.metadata } : null }}
       />
     </div>}
-      <AgentInputQueue workspace={workspace} disabled={sendingInput || Boolean(currentEdit)} onEdit={async input => {
-        beforeEditDraft.current = draft
-        setEditingInput(input)
-        setDraft(input.content)
-        promptRef.current?.focus()
-      }} />
-      {currentEdit && <div className="agent-input-editing">{t('editingQueuedMessage')}
-        <button onClick={() => { setEditingInput(null); setDraft(beforeEditDraft.current) }}>{t('cancel')}</button>
-      </div>}
-      {prompt}
+      <div className="agent-conversation-controls" hidden={Boolean(pendingQuestion)}>
+        <AgentInputQueue workspace={workspace} disabled={sendingInput || Boolean(currentEdit)} onEdit={async input => {
+          beforeEditDraft.current = draft
+          setEditingInput(input)
+          setDraft(input.content)
+          promptRef.current?.focus()
+        }} />
+        {currentEdit && <div className="agent-input-editing">{t('editingQueuedMessage')}
+          <button onClick={() => { setEditingInput(null); setDraft(beforeEditDraft.current) }}>{t('cancel')}</button>
+        </div>}
+        {prompt}
+      </div>
     </div>}
   </section>
 }

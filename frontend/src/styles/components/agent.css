@@ -243,7 +243,7 @@ html.agent-panel-resizing .agent-drawer { transition: none; }
 .agent-message-attachments__document:hover { background: var(--control-hover); }
 .agent-message-attachments__document:active { scale: .96; }
 .agent-message-attachments__document:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.agent-message-attachments__document > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.agent-message-attachments__document > .agent-message-attachments__copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .agent-message-attachments__document strong { overflow: hidden; font-size: 12px; font-weight: 600; line-height: 17px; text-overflow: ellipsis; white-space: nowrap; }
 .agent-message-attachments__document small { color: var(--muted); font-size: 10px; line-height: 14px; }
 .agent-image-lightbox { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 48px; background: rgba(0, 0, 0, .72); backdrop-filter: blur(8px); animation: agent-image-lightbox-in 160ms ease-out; }
@@ -383,4 +383,7 @@ html.agent-panel-resizing .agent-drawer { transition: none; }
 
 .agent-conversation:not(.agent-conversation--empty) > .agent-conversation-input { grid-row: 3; min-width: 0; min-height: 0; display: flex; flex-direction: column; max-height: 75cqh; }
 .agent-conversation-input > .agent-question-composer { flex: 0 1 auto; }
-.agent-conversation-input > .agent-conversation-prompt { flex-shrink: 0; position: relative; }
+.agent-conversation-controls > .agent-conversation-prompt { flex-shrink: 0; position: relative; }
+
+.agent-conversation-controls { display: contents; }
+.agent-conversation-controls[hidden] { display: none; }
