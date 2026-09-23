@@ -67,6 +67,10 @@ def test_actual_usage_ratio_triggers_below_byte_threshold():
     assert fit(manager, messages)[1] is None
     compacted, metadata = fit(manager, messages, state={"context_token_ratio": 4})
     assert metadata and metadata["token_ratio"] == 4
+    assert metadata["trigger_reasons"] == ["estimated_tokens"]
+    assert metadata["before_tokens"] >= metadata["input_budget_tokens"]
+    assert metadata["before_bytes"] < metadata["storage_trigger_bytes"]
+    assert metadata["image_count"] == 0
     assert compacted[-1] == messages[-1]
 
 

@@ -10,6 +10,7 @@ from typing import Any
 from app.agent.metrics import AgentMetrics
 from app.agent.model import AgentContextWindowExceededError, AgentModelClient
 from app.agent.model_context import checkpoint_byte_limit
+from app.agent.request_diagnostics import count_images
 from app.persistence.agent_runtime import (
     DURABLE_CHECKPOINT_RESULT_RESERVE_BYTES,
     checkpoint_json_size_bytes,
@@ -69,6 +70,10 @@ class AgentContextManager:
         self._summary_max_tokens = summary_max_tokens
         self._metrics = metrics
 
+    @property
+    def storage_trigger_bytes(self) -> int:
+        return self._trigger_bytes
+
     async def fit(
         self,
         messages: list[dict[str, Any]],
@@ -93,7 +98,27 @@ class AgentContextManager:
             hydrated = await prepare(value) if prepare else value
             return (estimate_tokens(hydrated) + overhead) * ratio
 
-        initial_tokens = await cost(candidate)
+        hydrated_initial = await prepare(candidate) if prepare else candidate
+        initial_images = count_images(hydrated_initial)
+        initial_tokens = (estimate_tokens(hydrated_initial) + overhead) * ratio
+        trigger_reasons = [
+            reason
+            for reason, applies in (
+                ("forced", force),
+                ("checkpoint_bytes", initial_bytes >= self._trigger_bytes),
+                ("estimated_tokens", initial_tokens >= self.input_budget),
+            )
+            if applies
+        ]
+        diagnostics = {
+            "trigger_reasons": trigger_reasons,
+            "before_tokens": initial_tokens,
+            "before_bytes": initial_bytes,
+            "input_budget_tokens": self.input_budget,
+            "storage_trigger_bytes": self._trigger_bytes,
+            "image_count": initial_images,
+            "token_ratio": ratio,
+        }
         target_tokens = (overhead + max(0, self.input_budget / ratio - overhead) * 0.6) * ratio
         if not force and initial_bytes < self._trigger_bytes and initial_tokens < self.input_budget:
             return candidate, None
@@ -180,8 +205,8 @@ class AgentContextManager:
                     return before_candidate, {
                         "trigger": trigger,
                         "passes": passes - 1,
-                        "before_bytes": initial_bytes,
                         "after_bytes": previous_bytes,
+                        **diagnostics,
                     }
                 raise DomainError(
                     "agent_context_compaction_failed",
@@ -197,12 +222,9 @@ class AgentContextManager:
                     "schema_version": 1,
                     "trigger": trigger,
                     "passes": passes,
-                    "before_bytes": initial_bytes,
                     "after_bytes": current_bytes,
-                    "before_tokens": initial_tokens,
                     "after_tokens": current_tokens,
-                    "input_budget_tokens": self.input_budget,
-                    "token_ratio": ratio,
+                    **diagnostics,
                 }
             previous_bytes = current_bytes
             previous_tokens = current_tokens
@@ -211,8 +233,8 @@ class AgentContextManager:
                 "schema_version": 1,
                 "trigger": trigger,
                 "passes": passes,
-                "before_bytes": initial_bytes,
                 "after_bytes": previous_bytes,
+                **diagnostics,
             }
         raise DomainError(
             "agent_context_compaction_failed",

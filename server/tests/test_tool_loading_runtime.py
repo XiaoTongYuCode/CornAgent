@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.agent.model import ModelStreamEvent
 from app.agent.tools import ToolApproval, ToolDefinition
 from app.main import create_app
-from app.persistence.models import AgentQuestion, AgentRun
+from app.persistence.models import AgentModelRequest, AgentQuestion, AgentRun
 from tests.test_lifecycle import post, start, wait_run
 from tests.test_runtime import FakeAgentEventStream
 
@@ -67,6 +67,10 @@ def test_loaded_tools_survive_question_restart_without_trusting_user_or_tool_tex
             names = _names(tools)
             self.requests.append(names)
             assert "apply_records" not in names
+            yield ModelStreamEvent(
+                kind="usage",
+                payload={"prompt_tokens": 100, "prompt_cache_hit_tokens": 25},
+            )
             if self.restored:
                 assert ("inspect_records" in names) == self.expect_loaded
                 if len(self.requests) == 1:
@@ -100,6 +104,17 @@ def test_loaded_tools_survive_question_restart_without_trusting_user_or_tool_tex
             question_id = db.scalar(select(AgentQuestion.id).where(AgentQuestion.run_id == run_id))
             state = db.get(AgentRun, run_id).checkpoint["tool_context_state"]["tool_loading"]
             assert state["loaded_tools"] == ["inspect_records"]
+            requests = db.scalars(
+                select(AgentModelRequest)
+                .where(AgentModelRequest.run_id == run_id)
+                .order_by(AgentModelRequest.sequence)
+            ).all()
+            assert [item.sequence for item in requests] == [1, 2, 3]
+            assert [item.evidence["tools_change"] for item in requests] == [
+                "initial", "loading", "unchanged",
+            ]
+            assert all(item.evidence["cached_prompt_tokens"] == 25 for item in requests)
+            assert all(item.evidence["uncached_prompt_tokens"] == 75 for item in requests)
         assert executions == ["read"]
 
     restored_model = Model(restored=True)
@@ -122,6 +137,14 @@ def test_loaded_tools_survive_question_restart_without_trusting_user_or_tool_tex
         detail = wait_run(client, session_id)
         assert detail["messages"][-1]["markdown"] == "继续完成。"
         assert len(restored_model.requests) == 1
+        with restored_app.state.database.session_factory() as db:
+            requests = db.scalars(
+                select(AgentModelRequest)
+                .where(AgentModelRequest.run_id == run_id)
+                .order_by(AgentModelRequest.sequence)
+            ).all()
+            assert [item.sequence for item in requests] == [1, 2, 3, 4]
+            assert requests[-1].evidence["tools_change"] == "unchanged"
         assert executions == ["read"]
         response = post(client, f"/sessions/{session_id}/messages", {"content": "继续下一步。"})
         assert response.status_code == 200, response.text

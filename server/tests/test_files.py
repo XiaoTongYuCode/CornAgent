@@ -2,6 +2,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import random
 from io import BytesIO
 from uuid import uuid4
 
@@ -13,7 +14,7 @@ from app.agent.tools.base import ToolExecutionContext
 from app.agent.tools.files import ReadFileArguments, _read_file_sync
 from app.main import collect_files
 from app.object_store import LocalObjectStore, ObjectStoreError, S3ObjectStore
-from app.persistence.models import AgentRun, FileResource
+from app.persistence.models import AgentModelRequest, AgentRun, FileResource
 from app.persistence.scope import LOCAL_SCOPE
 from app.settings import Settings
 from tests.test_lifecycle import post, start, wait_run
@@ -164,6 +165,55 @@ def test_image_hydration_validates_immutable_content(client_factory):
             ).status_code
             == 422
         )
+
+
+@pytest.mark.parametrize("content", ["", "请分析这张图片"])
+def test_large_first_image_does_not_compact_or_store_base64(client_factory, content):
+    class ImageModel:
+        def __init__(self):
+            self.requests = []
+            self.compactions = 0
+
+        async def stream(self, messages):
+            self.requests.append(messages)
+            yield ModelStreamEvent(
+                kind="usage",
+                payload={"prompt_tokens": 1600, "prompt_cache_hit_tokens": 400},
+            )
+            yield ModelStreamEvent(kind="content", content="已收到图片。")
+
+        async def compact(self, _messages, *, max_tokens):
+            del max_tokens
+            self.compactions += 1
+            return {"summary": "不应触发压缩"}
+
+    pixels = random.Random(7).randbytes(3 * 1000 * 1000)
+    data = BytesIO()
+    Image.frombytes("RGB", (1000, 1000), pixels).save(data, format="PNG")
+    image = data.getvalue()
+    assert len(image) > 2_800_000
+    model = ImageModel()
+    with client_factory(model) as client:
+        file_id = upload(client, image, "image/png", "large.png")
+        created = post(
+            client, "/sessions", {"content": content, "attachments": [{"file_id": file_id}]}
+        ).json()
+        session_id, run_id = created["session"]["id"], created["run"]["id"]
+        wait_run(client, session_id)
+        assert len(model.requests) == 1
+        assert model.compactions == 0
+        parts = model.requests[0][-1]["content"]
+        assert any(part.get("type") == "image_url" for part in parts)
+        with client.app.state.database.session_factory() as db:
+            run = db.get(AgentRun, run_id)
+            assert "base64" not in json.dumps(run.checkpoint)
+            assert "context_checkpoint" not in run.checkpoint
+            evidence = db.query(AgentModelRequest).filter_by(run_id=run_id).one().evidence
+            assert evidence["image_count"] == 1
+            assert evidence["estimated_tokens"] < 20_000
+            assert evidence["cached_prompt_tokens"] == 400
+            assert evidence["uncached_prompt_tokens"] == 1200
+            assert "data:image" not in json.dumps(evidence)
 
 
 def test_local_blob_store_is_bounded_immutable_and_rejects_paths(tmp_path):
