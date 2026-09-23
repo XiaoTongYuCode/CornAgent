@@ -221,6 +221,25 @@ class AgentRun(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class AgentModelRequest(Base):
+    """One completed physical provider request, without prompt or tool arguments."""
+
+    __tablename__ = "cornagent_agent_model_requests"
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence", name="uq_agent_model_requests_run_sequence"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("cornagent_agent_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AgentSubagentTask(Base):
     """Durable child queue and inbox; one immutable result per task."""
 

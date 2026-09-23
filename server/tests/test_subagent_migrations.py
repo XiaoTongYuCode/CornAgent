@@ -13,7 +13,7 @@ from sqlalchemy.engine import make_url
 from app.auth.models import LoginSession, User
 from app.database import Database
 from app.persistence.agent_runtime import AgentRepository
-from app.persistence.models import AgentRun, AgentSubagentTask
+from app.persistence.models import AgentModelRequest, AgentRun, AgentSubagentTask
 from app.persistence.scope import LOCAL_SCOPE
 from app.settings import Settings
 
@@ -114,6 +114,7 @@ def test_subagent_schema_fresh_install_and_upgrade(settings, tmp_path, monkeypat
         database = Database(connection_settings)
         inspector = inspect(database.engine)
         assert "cornagent_subagent_tasks" in inspector.get_table_names()
+        assert "cornagent_agent_model_requests" in inspector.get_table_names()
         assert {"cornagent_agent_inputs", "cornagent_agent_input_mutations"} <= set(
             inspector.get_table_names()
         )
@@ -157,6 +158,15 @@ def test_subagent_schema_fresh_install_and_upgrade(settings, tmp_path, monkeypat
             row = db.get(AgentRun, run.id)
             row.status = "waiting_for_subagents"
             db.commit()
+            db.add(
+                AgentModelRequest(
+                    run_id=run.id,
+                    sequence=1,
+                    evidence={"usage": {"prompt_tokens": 12}},
+                )
+            )
+            db.commit()
+            assert db.query(AgentModelRequest).filter_by(run_id=run.id).count() == 1
             with pytest.raises(Exception, match="(?i)(unique|duplicate)"):
                 clone = {
                     column.name: getattr(row, column.name) for column in AgentRun.__table__.columns

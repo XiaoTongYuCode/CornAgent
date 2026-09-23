@@ -24,9 +24,14 @@ class AgentMetrics:
             self._active_children = max(0, self._active_children - 1)
 
     def increment(self, name: str, **labels: str) -> None:
+        self.add(name, 1, **labels)
+
+    def add(self, name: str, value: int, **labels: str) -> None:
+        if value < 0:
+            raise ValueError("Metric counters cannot decrease")
         key = (name, tuple(sorted(labels.items())))
         with self._lock:
-            self._counters[key] = self._counters.get(key, 0) + 1
+            self._counters[key] = self._counters.get(key, 0) + value
 
     def run_started(self) -> None:
         with self._lock:

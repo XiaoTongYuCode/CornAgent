@@ -36,6 +36,12 @@ from app.agent.prompt import (
     AgentSourceContextRegistry,
     runtime_system_messages,
 )
+from app.agent.request_diagnostics import (
+    count_images,
+    fingerprint,
+    numeric_usage,
+    prompt_cache_tokens,
+)
 from app.agent.stream import AgentEventStream, RedisAgentEventStream
 from app.agent.subagents.protocol import SubagentOptions
 from app.agent.subagents.runner import ChildAgentRunner
@@ -556,6 +562,7 @@ class AgentRuntime:
                         recovered_overflow = True
                         continue
                     try:
+                        request_started = time.monotonic()
                         await self._stream_model_round(
                             run_id=run_id,
                             fence=fence,
@@ -571,6 +578,45 @@ class AgentRuntime:
                             tool_context.checkpoint_state["context_token_ratio"] = max(
                                 0.5, min(4, actual / max(1, request_estimate) * 1.1)
                             )
+                        request_tools = tool_context.runtime_cache["request_tools"]
+                        cached = prompt_cache_tokens(round_state.usage)
+                        profile = {
+                            "usage": numeric_usage(round_state.usage),
+                            "cached_prompt_tokens": cached[0] if cached else None,
+                            "uncached_prompt_tokens": cached[1] if cached else None,
+                            "system_hash": fingerprint(
+                                {
+                                    "adapter": getattr(self.model_client, "system_prompt", ""),
+                                    "messages": [
+                                        item
+                                        for item in model_messages
+                                        if item.get("role") == "system"
+                                    ],
+                                }
+                            ),
+                            "tool_hashes": [fingerprint(item) for item in request_tools],
+                            "active_tool_count": len(request_tools),
+                            "image_count": count_images(model_messages),
+                            "estimated_tokens": request_estimate,
+                            "effective_estimated_tokens": request_estimate * ratio,
+                            "input_budget_tokens": self.context_manager.input_budget,
+                            "storage_trigger_bytes": self.context_manager.storage_trigger_bytes,
+                            "token_ratio_before": ratio,
+                            "token_ratio_after": tool_context.checkpoint_state.get(
+                                "context_token_ratio", ratio
+                            ),
+                            "duration_ms": round((time.monotonic() - request_started) * 1000),
+                        }
+                        evidence = await self._db(
+                            lambda repo, current_profile=profile: repo.record_model_request(
+                                run_id,
+                                self.worker_id,
+                                fence,
+                                profile=current_profile,
+                                tool_context_state=tool_context.checkpoint_state,
+                            )
+                        )
+                        self._observe_model_request(evidence)
                         break
                     except AgentContextWindowExceededError as exc:
                         self.metrics.increment(
@@ -1803,6 +1849,9 @@ class AgentRuntime:
             checkpoint["safe_provider_messages"] = messages
             checkpoint["tool_context_state"] = tool_context.checkpoint_state
             checkpoint["context_checkpoint"] = metadata
+            checkpoint["context_compaction_count"] = int(
+                checkpoint.get("context_compaction_count", 0)
+            ) + 1
             await report("completed")
         return messages
 
@@ -1815,6 +1864,25 @@ class AgentRuntime:
                 ),
             }
         )
+
+    def _observe_model_request(self, evidence: Mapping[str, Any]) -> None:
+        self.metrics.increment("cornagent_agent_model_requests_total")
+        cached = evidence.get("cached_prompt_tokens")
+        uncached = evidence.get("uncached_prompt_tokens")
+        if isinstance(cached, int) and isinstance(uncached, int):
+            self.metrics.add("cornagent_agent_prompt_cached_tokens_total", cached)
+            self.metrics.add("cornagent_agent_prompt_uncached_tokens_total", uncached)
+            if evidence.get("tools_change") == "loading":
+                self.metrics.add(
+                    "cornagent_agent_prompt_uncached_tokens_after_loading_total", uncached
+                )
+        if evidence.get("system_changed"):
+            self.metrics.increment("cornagent_agent_system_prefix_changes_total")
+        tools_change = evidence.get("tools_change")
+        if tools_change not in {"initial", "unchanged"}:
+            self.metrics.increment(
+                "cornagent_agent_tools_prefix_changes_total", reason=str(tools_change)
+            )
 
     async def _materialize_agent_files(
         self,

@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only
 
 from app.agent.model_context import checkpoint_byte_limit
+from app.agent.request_diagnostics import prefix_change
 from app.document_formats import DOCUMENT_TYPES
 from app.persistence import inputs
 from app.persistence.agent_schemas import (
@@ -43,6 +44,7 @@ from app.persistence.files import retire_agent_session_attachments
 from app.persistence.models import (
     AgentMessage,
     AgentMessageFile,
+    AgentModelRequest,
     AgentQuestion,
     AgentRun,
     AgentSession,
@@ -1704,12 +1706,60 @@ class AgentRepository:
                 "tool_context_state_version": 1,
                 "tool_context_state": dict(tool_context_state),
                 "context_checkpoint": dict(metadata),
+                "context_compaction_count": int(checkpoint.get("context_compaction_count", 0)) + 1,
             }
         )
         ensure_checkpoint_size(checkpoint)
         run.checkpoint = checkpoint
         run.checkpoint_revision += 1
         self.db.commit()
+
+    def record_model_request(
+        self,
+        run_id: str,
+        worker_id: str,
+        fence: int,
+        *,
+        profile: dict[str, Any],
+        tool_context_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Commit completed provider-call evidence before consuming its answer."""
+
+        run = self._locked_leased_run(run_id, worker_id, fence)
+        prior = self.db.scalar(
+            select(AgentModelRequest)
+            .where(AgentModelRequest.run_id == run_id)
+            .order_by(AgentModelRequest.sequence.desc())
+            .limit(1)
+        )
+        checkpoint = dict(run.checkpoint)
+        compaction_count = int(checkpoint.get("context_compaction_count", 0))
+        previous = prior.evidence if prior else None
+        system_changed, tools_change = prefix_change(
+            previous,
+            profile["system_hash"],
+            profile["tool_hashes"],
+            compacted=compaction_count > int((previous or {}).get("compaction_count", 0)),
+        )
+        evidence = {
+            **profile,
+            "sequence": prior.sequence + 1 if prior else 1,
+            "compaction_count": compaction_count,
+            "system_changed": system_changed,
+            "tools_change": tools_change,
+        }
+        if compaction_count > int((previous or {}).get("compaction_count", 0)):
+            evidence["context_compaction"] = dict(checkpoint.get("context_checkpoint") or {})
+        checkpoint["tool_context_state"] = dict(tool_context_state)
+        ensure_checkpoint_size(checkpoint)
+        evidence["checkpoint_bytes"] = checkpoint_json_size_bytes(checkpoint)
+        run.checkpoint = checkpoint
+        run.checkpoint_revision += 1
+        self.db.add(
+            AgentModelRequest(run_id=run_id, sequence=evidence["sequence"], evidence=evidence)
+        )
+        self.db.commit()
+        return evidence
 
     def respond_question(
         self,
