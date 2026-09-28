@@ -13,11 +13,42 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import uuid4
 
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from sqlalchemy import delete
 
 from app.persistence.models import UsageEvent
 
 logger = logging.getLogger(__name__)
+_tracing_configured = False
+
+
+def configure_tracing(endpoint: str) -> None:
+    """Opt-in OTLP spans containing names/status only; never prompts or tool arguments."""
+
+    from urllib.parse import urlsplit
+
+    global _tracing_configured
+    target = urlsplit(endpoint)
+    if (
+        (
+            target.scheme != "https"
+            and not (target.scheme == "http" and target.hostname in {"127.0.0.1", "localhost"})
+        )
+        or target.username
+        or target.password
+        or target.fragment
+    ):
+        raise ValueError("OTLP tracing requires HTTPS or local HTTP without URL credentials")
+    if _tracing_configured:
+        return
+    provider = TracerProvider(resource=Resource.create({"service.name": "cornagent"}))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
+    trace.set_tracer_provider(provider)
+    _tracing_configured = True
 
 
 @dataclass(frozen=True)
@@ -157,19 +188,28 @@ def _emit(kind, name, status, started, usage=None):
 
 
 async def tool_call(name, callback):
-    if _current.get() is None or name is None:
+    if name is None:
         return await callback()
-    started = time.monotonic()
-    status = "failed"
-    try:
-        result = await callback()
-        status = "failed" if isinstance(result, dict) and result.get("ok") is False else "completed"
-        return result
-    except asyncio.CancelledError:
-        status = "cancelled"
-        raise
-    finally:
-        emit("tool", name, status, started)
+    with trace.get_tracer("cornagent.agent").start_as_current_span(
+        "agent.tool",
+        attributes={"agent.tool.name": name},
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        started = time.monotonic()
+        status = "failed"
+        try:
+            result = await callback()
+            status = (
+                "failed" if isinstance(result, dict) and result.get("ok") is False else "completed"
+            )
+            return result
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
+        finally:
+            span.set_attribute("agent.tool.status", status)
+            emit("tool", name, status, started)
 
 
 async def completion(callback, **kwargs):

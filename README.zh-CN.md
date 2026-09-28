@@ -245,6 +245,7 @@ CORNAGENT_TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest -q
 | [后端说明](server/README.md) | 服务启动、依赖、配置与检查 |
 | [架构说明](docs/architecture.md) | 模块分工与请求链路 |
 | [Agent 运行时](docs/runtime.md) | 状态机、恢复、SSE 与消息树 |
+| [Runtime 扩展](docs/platform-extensions.md) | 持久事务边界、MCP、追踪、评测与运维检查 |
 | [子任务与工具](docs/subagents.md) | 并行任务、工具扩展与演示 |
 | [文件存储](docs/storage.md) | 附件读写、会话隔离与回收 |
 | [测试与验证](docs/verification.md) | 回归范围与界面验证记录 |

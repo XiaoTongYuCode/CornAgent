@@ -39,6 +39,15 @@ from app.persistence.agent_schemas import (
     AgentSessionOut,
     AgentStreamSnapshot,
 )
+from app.persistence.checkpoints import (
+    DURABLE_CHECKPOINT_MAX_BYTES,
+    DURABLE_CHECKPOINT_RESULT_RESERVE_BYTES,
+    DURABLE_CHECKPOINT_SEED_MAX_BYTES,
+    checkpoint_json_size_bytes,
+    ensure_checkpoint_size,
+    has_inflight_ordinary_tool_batch,
+    ordinary_tool_batch_marker,
+)
 from app.persistence.errors import DomainError
 from app.persistence.files import retire_agent_session_attachments
 from app.persistence.models import (
@@ -57,67 +66,18 @@ from app.persistence.page_cursor import (
     normalize_cursor_time,
 )
 from app.persistence.scope import Identity
-
-ACTIVE_RUN_STATUSES = (
-    "pending",
-    "running",
-    "waiting_for_user",
-    "waiting_for_subagents",
-    "cancelling",
+from app.persistence.transitions import (
+    ACTIVE_RUN_STATUSES,
+    TERMINAL_RUN_STATUSES,
+    transition_run,
 )
-TERMINAL_RUN_STATUSES = ("completed", "failed", "cancelled")
+
 ASK_USER_TOOL_NAME = "ask_user"
 LEASE_SECONDS = 30
-DURABLE_CHECKPOINT_MAX_BYTES = 3 * 1024 * 1024
-DURABLE_CHECKPOINT_RESULT_RESERVE_BYTES = 64 * 1024
-DURABLE_CHECKPOINT_SEED_MAX_BYTES = (
-    DURABLE_CHECKPOINT_MAX_BYTES - DURABLE_CHECKPOINT_RESULT_RESERVE_BYTES
-)
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
-
-
-def checkpoint_json_size_bytes(payload: dict[str, Any]) -> int:
-    try:
-        encoded = json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-    except (TypeError, ValueError) as exc:
-        raise DomainError(
-            "invalid_agent_checkpoint",
-            "Agent checkpoint data must be JSON serializable.",
-        ) from exc
-    return len(encoded)
-
-
-def ensure_checkpoint_size(
-    payload: dict[str, Any],
-    *,
-    max_bytes: int | None = None,
-) -> None:
-    if max_bytes is None:
-        max_bytes = checkpoint_byte_limit(int(payload.get("context_window_tokens", 64000)))
-    size_bytes = checkpoint_json_size_bytes(payload)
-    if size_bytes > max_bytes:
-        raise DomainError(
-            "agent_checkpoint_too_large",
-            f"Agent checkpoint is {size_bytes} bytes; the durable limit is {max_bytes} bytes.",
-        )
-
-
-def ordinary_tool_batch_marker(checkpoint: dict[str, Any]) -> dict[str, Any] | None:
-    marker = checkpoint.get("ordinary_tool_batch")
-    return dict(marker) if isinstance(marker, dict) else None
-
-
-def has_inflight_ordinary_tool_batch(checkpoint: dict[str, Any]) -> bool:
-    marker = ordinary_tool_batch_marker(checkpoint)
-    return marker is not None and marker.get("phase") == "executing"
 
 
 def answered_question_count(db: Session, run_id: str) -> int:
@@ -1181,7 +1141,7 @@ class AgentRepository:
         if run is None or run.status != "pending":
             return None
         now = _now()
-        run.status = "running"
+        transition_run(run, "running")
         run.lease_owner = worker_id
         run.lease_fence += 1
         run.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
@@ -1209,7 +1169,7 @@ class AgentRepository:
         except DomainError as exc:
             if exc.code != "agent_checkpoint_too_large":
                 raise
-            run.status = "failed"
+            transition_run(run, "failed")
             run.error_code = exc.code
             run.error_message = exc.message
             run.completed_at = now
@@ -1391,7 +1351,7 @@ class AgentRepository:
         run.checkpoint = checkpoint
         run.checkpoint_revision += 1
         run.provider_usage = _merge_usage(run.provider_usage, usage)
-        run.status = "waiting_for_user"
+        transition_run(run, "waiting_for_user")
         run.user_wait_started_at = _now()
         run.lease_owner = None
         run.lease_expires_at = None
@@ -1884,7 +1844,7 @@ class AgentRepository:
         checkpoint["safe_provider_messages"] = provider_messages
         run.stream_epoch += 1
         run.next_sequence = 1
-        run.status = "pending"
+        transition_run(run, "pending")
         run.lease_owner = None
         run.lease_expires_at = None
         run.user_wait_started_at = None
@@ -1985,7 +1945,7 @@ class AgentRepository:
         settle_root_children(self.db, run)
         terminal_parts = [dict(part) for part in run.content_parts]
         run.content_parts = terminal_parts
-        run.status = "completed"
+        transition_run(run, "completed")
         run.completed_at = now
         run.lease_owner = None
         run.lease_expires_at = None
@@ -2037,7 +1997,7 @@ class AgentRepository:
         ):
             return None
         now = _now()
-        run.status = "failed"
+        transition_run(run, "failed")
         run.error_code = code
         run.error_message = message
         run.completed_at = now
@@ -2081,7 +2041,7 @@ class AgentRepository:
             run.content_parts = _upsert_part(
                 run.content_parts, self._question_part_from_model(pending, run)
             )
-        run.status = "cancelled"
+        transition_run(run, "cancelled")
         run.cancel_requested_at = now
         run.completed_at = now
         run.lease_owner = None
@@ -2146,7 +2106,7 @@ class AgentRepository:
                         item["metadata"] = metadata
                     terminal_parts.append(item)
                 run.content_parts = terminal_parts
-                run.status = "failed"
+                transition_run(run, "failed")
                 run.error_code = "agent_tool_batch_indeterminate"
                 run.error_message = (
                     f"Ordinary tool batch {batch_id} lost its worker while executing; "
@@ -2161,7 +2121,7 @@ class AgentRepository:
                 run.checkpoint_revision += 1
                 self._persist_terminal_assistant(run, now)
                 continue
-            run.status = "pending"
+            transition_run(run, "pending")
             run.stream_epoch += 1
             run.next_sequence = 1
             run.lease_owner = None
@@ -2184,7 +2144,7 @@ class AgentRepository:
             .with_for_update(skip_locked=True)
         ).all()
         for run in inconsistent:
-            run.status = "waiting_for_user"
+            transition_run(run, "waiting_for_user")
             run.user_wait_started_at = run.user_wait_started_at or now
             run.lease_owner = None
             run.lease_expires_at = None

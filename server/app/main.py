@@ -33,10 +33,11 @@ from app.auth.routes import router as auth_router
 from app.database import Database
 from app.object_store import BlobStore, build_blob_store
 from app.pdf_reader import PdfReader
+from app.persistence.backend import DurableBackend
 from app.persistence.errors import DomainError
 from app.persistence.models import FileResource, utcnow
 from app.settings import Settings
-from app.telemetry import Collector, DatabaseSink, EventSink
+from app.telemetry import Collector, DatabaseSink, EventSink, configure_tracing
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +75,11 @@ def create_app(
     email_sender: EmailSender | None = None,
     event_stream: AgentEventStream | None = None,
     telemetry_sink: EventSink | None = None,
+    durable_backend: DurableBackend | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
+    if settings.otlp_traces_endpoint:
+        configure_tracing(settings.otlp_traces_endpoint)
     if (
         settings.users_enabled
         and settings.auth_mode == "account"
@@ -99,6 +103,8 @@ def create_app(
     runtime = AgentRuntime(
         session_factory=database.session_factory,
         telemetry=telemetry_collector,
+        mcp_servers=settings.agent_mcp_servers,
+        durable_backend=durable_backend,
         redis_url=settings.redis_url,
         model=settings.agent_model,
         api_key=settings.agent_api_key.get_secret_value() if settings.agent_api_key else None,
@@ -312,8 +318,10 @@ def create_app(
         @app.get("/rendering")
         def spa(request: Request, session_id: str | None = None):
             home = request.url.path in {"/", "/chat"}
-            filename = "index.html" if home else (
-                "app.html" if session_id is not None else f"{request.url.path[1:]}.html"
+            filename = (
+                "index.html"
+                if home
+                else ("app.html" if session_id is not None else f"{request.url.path[1:]}.html")
             )
             page = dist / filename
             # Retain compatibility with older frontend bundles.
@@ -341,8 +349,6 @@ def create_app(
                 "/favicon.svg": "image/svg+xml",
                 "/.well-known/aiagentslisting-verify.txt": "text/plain",
             }[request.url.path]
-            return FileResponse(
-                path, media_type=media_type, headers={"Cache-Control": "no-cache"}
-            )
+            return FileResponse(path, media_type=media_type, headers={"Cache-Control": "no-cache"})
 
     return app

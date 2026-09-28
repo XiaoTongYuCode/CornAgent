@@ -23,6 +23,9 @@ dependencies = [
     "argon2-cffi>=25,<26",
     "webauthn>=2.7,<3",
     "email-validator>=2,<3",
+    "mcp>=1.22,<2",
+    "opentelemetry-sdk>=1.36,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.36,<2",
 ]
 
 [build-system]

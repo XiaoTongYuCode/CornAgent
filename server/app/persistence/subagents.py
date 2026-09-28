@@ -30,6 +30,7 @@ from app.persistence.agent_runtime import (
 )
 from app.persistence.errors import DomainError
 from app.persistence.models import AgentMessage, AgentRun, AgentSubagentTask
+from app.persistence.transitions import transition_run
 
 
 def utc(value: datetime) -> datetime:
@@ -466,7 +467,7 @@ class SubagentRepository:
         root.checkpoint_revision += 1
         root.provider_usage = _merge_usage(root.provider_usage, usage)
         if active_wait:
-            root.status = "waiting_for_subagents"
+            transition_run(root, "waiting_for_subagents")
             root.lease_owner = None
             root.lease_expires_at = None
         assistant = self.db.get(AgentMessage, root.assistant_message_id)
@@ -628,7 +629,7 @@ class SubagentRepository:
                 "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
             },
         ]
-        root.status = "pending"
+        transition_run(root, "pending")
         root.stream_epoch += 1
         root.next_sequence = 1
         return self._save(

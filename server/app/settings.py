@@ -3,10 +3,50 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+class AgentMcpServer(BaseModel):
+    """Operator-owned MCP allowlist; callers cannot supply endpoints or tool names."""
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,24}$")
+    url: str
+    tools: tuple[str, ...] = Field(min_length=1)
+    read_only_tools: tuple[str, ...] = ()
+    write_tools: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_server(self):
+        from urllib.parse import urlsplit
+
+        target = urlsplit(self.url)
+        if (
+            (
+                target.scheme != "https"
+                and not (target.scheme == "http" and target.hostname in {"127.0.0.1", "localhost"})
+            )
+            or target.username
+            or target.password
+            or target.fragment
+        ):
+            raise ValueError("MCP server URL must be HTTPS or local HTTP without credentials")
+        tools = set(self.tools)
+        reads = set(self.read_only_tools)
+        writes = set(self.write_tools)
+        if (
+            len(tools) != len(self.tools)
+            or len(reads) != len(self.read_only_tools)
+            or len(writes) != len(self.write_tools)
+            or reads & writes
+            or reads | writes != tools
+        ):
+            raise ValueError("Every MCP tool must be classified exactly once as read or write")
+        if any(not tool or len(tool) > 64 for tool in self.tools):
+            raise ValueError("MCP tool names must be 1 to 64 characters")
+        return self
 
 
 class Settings(BaseSettings):
@@ -19,6 +59,7 @@ class Settings(BaseSettings):
     )
     telemetry_enabled: bool = True
     telemetry_retention_days: int = Field(default=90, ge=1, le=365)
+    otlp_traces_endpoint: str | None = None
     users_enabled: bool = False
     auth_mode: Literal["invisible", "account"] = "invisible"
     auth_secret: SecretStr | None = None
@@ -94,6 +135,7 @@ class Settings(BaseSettings):
     agent_subagents_enabled: bool = True
     tavily_api_key: SecretStr | None = Field(default=None, validation_alias="tavily_api_key")
     agent_mock_tools_enabled: bool = False
+    agent_mcp_servers: tuple[AgentMcpServer, ...] = ()
     agent_subagent_model: str | None = None
     agent_subagent_spawn_max_tasks: int = Field(default=10, ge=1, le=10)
     agent_subagent_run_max_tasks: int = Field(default=10, ge=1, le=100)
