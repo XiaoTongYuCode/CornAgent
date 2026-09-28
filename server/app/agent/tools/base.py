@@ -147,6 +147,8 @@ class ToolDefinition:
 
         if "handler" in options or "approval_handler" in options or "effect" in options:
             raise ValueError("Approval handlers and effect are set by ToolDefinition.approved.")
+        if options.get("read_only"):
+            raise ValueError("Approved write tools cannot be read-only.")
         return cls(
             name=name,
             description=description,

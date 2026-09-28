@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.types import PaginatedRequestParams
 
 from app.agent.tools import ToolDefinition
 from app.settings import AgentMcpServer
@@ -31,10 +32,20 @@ async def discover_mcp_tools(servers: tuple[AgentMcpServer, ...]) -> list[ToolDe
     definitions: list[ToolDefinition] = []
     names: set[str] = set()
     for server in servers:
+        offered = {}
+        seen_cursors: set[str] = set()
         async with asyncio.timeout(15):
             async with _session(server.url) as client:
                 response = await client.list_tools()
-        offered = {item.name: item for item in response.tools}
+                while True:
+                    offered.update((item.name, item) for item in response.tools)
+                    cursor = response.nextCursor
+                    if cursor is None:
+                        break
+                    if cursor in seen_cursors:
+                        raise ValueError(f"MCP server {server.name!r} repeated a tools cursor")
+                    seen_cursors.add(cursor)
+                    response = await client.list_tools(params=PaginatedRequestParams(cursor=cursor))
         missing = set(server.tools) - offered.keys()
         if missing:
             raise ValueError(
@@ -102,6 +113,7 @@ async def discover_mcp_tools(servers: tuple[AgentMcpServer, ...]) -> list[ToolDe
                     name=local_name,
                     description=remote.description or f"MCP {server.name}: {remote_name}",
                     parameters=remote.inputSchema,
+                    strict=False,
                     handler=invoke,
                     read_only=read_only,
                     effect="read" if read_only else "write",

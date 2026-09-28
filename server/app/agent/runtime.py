@@ -347,6 +347,9 @@ class AgentRuntime(ApprovalRuntimeMixin):
                 self.tool_catalog.register(definition)
                 if isinstance(self.model_client, LiteLLMAgentModel):
                     self.model_client.tools.append(definition.to_provider_tool())
+            self.skill_prompt_blocks = self.skill_catalog.active_prompt_blocks(
+                {definition.name for definition in self.tool_catalog.definitions()}
+            )
             self._mcp_loaded = True
         ping = getattr(self.event_stream, "ping", None)
         if callable(ping):

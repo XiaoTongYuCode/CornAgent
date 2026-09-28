@@ -38,6 +38,7 @@ def configure_tracing(endpoint: str) -> None:
             target.scheme != "https"
             and not (target.scheme == "http" and target.hostname in {"127.0.0.1", "localhost"})
         )
+        or not target.hostname
         or target.username
         or target.password
         or target.fragment
