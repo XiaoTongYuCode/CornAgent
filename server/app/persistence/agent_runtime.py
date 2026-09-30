@@ -2025,6 +2025,14 @@ class AgentRepository:
         run.completed_at = now
         run.lease_owner = None
         run.lease_expires_at = None
+        checkpoint = dict(run.checkpoint)
+        if has_inflight_ordinary_tool_batch(checkpoint):
+            # Every failure after external IO admission has an unknown result,
+            # including invalid reapproval or a receipt that could not commit.
+            run.content_parts = _indeterminate_tool_parts(run.content_parts)
+            checkpoint["content_parts"] = run.content_parts
+            run.checkpoint = checkpoint
+            run.checkpoint_revision += 1
         self._persist_terminal_assistant(run, now)
         event = _event(run, "error", {"run_id": run.id, "code": code, "message": message})
         self.db.commit()

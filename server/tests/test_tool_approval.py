@@ -231,6 +231,8 @@ def test_generic_tool_approval_resumes_original_call_before_model(client, case):
         "crash_before_receipt",
         "run_cancel_before_write",
         "run_cancel_after_write",
+        "reapproval",
+        "receipt_failure",
         "mixed",
     ],
 )
@@ -248,6 +250,10 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
     def persist(repo, *args, **kwargs):
         if case == "crash_before_receipt" and kwargs["phase"] == "completed":
             raise asyncio.CancelledError
+        if case == "receipt_failure" and kwargs["phase"] == "completed":
+            from app.persistence.errors import DomainError
+
+            raise DomainError("test_receipt_failed", "Receipt could not be committed.")
         return original_persist(repo, *args, **kwargs)
 
     monkeypatch.setattr(AgentRepository, "persist_ordinary_tool_batch", persist)
@@ -340,6 +346,14 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
             async def execute(payload, context):
                 calls.append(payload)
                 return {"ok": False, "retryable": True, "write_state": "unknown"}
+
+            tool = replace(tool, approval_handler=execute)
+        elif case == "reapproval":
+
+            async def execute(payload, context):
+                calls.append(payload)
+                effects.append(payload)
+                return ToolApproval(query="New plan after a possible write", payload=payload)
 
             tool = replace(tool, approval_handler=execute)
         runtime = AgentRuntime(
@@ -447,6 +461,21 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
             assert len(model.requests) == 1
             assert len(calls) == 1
             assert len(effects) == len(calls)
+        elif case in {"reapproval", "receipt_failure"}:
+            final = _wait_for_snapshot_status(client, runtime, run_id, "failed")
+            assert final.run.error_code == (
+                "agent_approval_indeterminate" if case == "reapproval" else "test_receipt_failed"
+            )
+            operation = next(p for p in final.content_parts if p.kind == "tool_call")
+            assert operation.metadata["status"] == "failed"
+            assert operation.metadata["error_code"] == "agent_tool_batch_indeterminate"
+            assert operation.metadata["operation_outcome"]["state"] == "unknown"
+            detail = client.get(f"/api/v1/agent/sessions/{created.json()['session']['id']}").json()
+            assistant = next(
+                m for m in detail["messages"] if m["id"] == final.run.assistant_message_id
+            )
+            assert assistant["content_parts"] == final.model_dump(mode="json")["content_parts"]
+            assert len(calls) == 1 and len(effects) == 1 and len(model.requests) == 1
         elif case.startswith("crash_"):
             client.portal.call(asyncio.wait_for, interrupted.wait(), 5)
             client.portal.call(runtime.close)
@@ -473,7 +502,10 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
                     AgentToolReceipt.run_id == run_id, AgentToolReceipt.call_id == "mcp-change"
                 )
             ).all()
-            if case.startswith(("crash_", "run_cancel_")):
+            if case.startswith(("crash_", "run_cancel_")) or case in {
+                "reapproval",
+                "receipt_failure",
+            }:
                 assert receipts == []
                 assert stored.checkpoint["ordinary_tool_batch"]["phase"] == "executing"
                 provider_result = next(
@@ -485,8 +517,7 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
                 assert provider_result in AgentRepository(db)._provider_lineage(
                     stored.assistant_message_id
                 )
-                if case.startswith("run_cancel_"):
-                    assert stored.checkpoint["content_parts"] == stored.content_parts
+                assert stored.checkpoint["content_parts"] == stored.content_parts
             else:
                 assert len(receipts) == 1
                 assert "pending_tool_approval" not in stored.checkpoint

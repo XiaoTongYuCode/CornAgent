@@ -52,6 +52,7 @@ tool = ToolDefinition(
   执行中取消 Run 时，同一取消事务把工具状态终结为 failed，保留 unknown 结果和禁止重放
   标记；SSE snapshot、会话历史与重启后的状态一致。取消不能证明远端未执行操作。
   下一轮模型历史的终结工具消息同样保留 unknown，并明确要求人工核实、禁止自动重试。
+  二次审批协议错误或回执提交失败等执行后异常也由 fail_run 同事务终结工具状态，保留未知结果。
   该模式的 execute 不能返回新的 `ToolApproval`；新的计划必须在只读 prepare 阶段完成。
 - 结果必须可 JSON 序列化且有界。私有计划只存于服务端；不要把密钥或无关数据放进 payload。
 - 运行时保留原始 tool-call ID，批准后无需模型重新生成调用。结果和 checkpoint 清理原子提交，
