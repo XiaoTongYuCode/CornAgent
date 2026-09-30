@@ -32,6 +32,13 @@ def inspect_runtime(limit: int = 20) -> dict:
         with database.session_factory() as db:
             runs = db.scalars(select(AgentRun).order_by(AgentRun.created_at.desc()).limit(limit))
             recent = list(runs)
+            stale_leases = list(
+                db.scalars(
+                    select(AgentRun.id)
+                    .where(AgentRun.status == "running", AgentRun.lease_expires_at < now)
+                    .order_by(AgentRun.lease_expires_at, AgentRun.id)
+                )
+            )
             tasks = db.scalars(
                 select(AgentSubagentTask)
                 .where(AgentSubagentTask.status.in_(("queued", "running")))
@@ -40,13 +47,7 @@ def inspect_runtime(limit: int = 20) -> dict:
             active_tasks = list(tasks)
             return {
                 "run_statuses": dict(Counter(run.status for run in recent)),
-                "stale_leases": [
-                    run.id
-                    for run in recent
-                    if run.status == "running"
-                    and run.lease_expires_at
-                    and _utc(run.lease_expires_at) < now
-                ],
+                "stale_leases": stale_leases,
                 "recent_runs": [
                     {"id": run.id, "status": run.status, "error_code": run.error_code}
                     for run in recent
@@ -55,10 +56,6 @@ def inspect_runtime(limit: int = 20) -> dict:
             }
     finally:
         database.close()
-
-
-def _utc(value: datetime) -> datetime:
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def score_case(case: dict, status: str, markdown: str) -> dict:

@@ -12,7 +12,7 @@ from app.persistence.errors import DomainError
 
 
 class ApprovalRuntimeMixin:
-    """Plan, persist decision, invoke idempotent handler and record its receipt."""
+    """Plan, persist decision and execute according to the tool's replay policy."""
 
     async def _prepare_tool_approval(self, call: RuntimeToolCall) -> RuntimeToolOutcome:
         found, result = await self._replay_tool_result(
@@ -36,6 +36,7 @@ class ApprovalRuntimeMixin:
             "tool_name": call.definition.name,
             "tool_call": call.normalized_calls[0],
             "arguments": call.arguments,
+            "replay_safe": call.definition.approval_replay_safe,
         }
         if isinstance(result, ToolApproval):
             await self._pause_tool_approval(
@@ -92,6 +93,9 @@ class ApprovalRuntimeMixin:
             tool_call_id=pending["tool_call"]["id"],
             batch_id=f"approval-{pending['tool_call']['id']}",
         )
+        # Persisted policy may only become more restrictive after a restart.
+        replay_safe = definition.approval_replay_safe and pending.get("replay_safe", True)
+        pending = {**pending, "replay_safe": replay_safe}
         if pending["decision"] == "rejected":
             result = {
                 "ok": True,
@@ -107,19 +111,32 @@ class ApprovalRuntimeMixin:
                 status="running",
                 arguments=pending["arguments"],
             )
-            events = await self._db(
-                lambda repo: repo.persist_tool_call_parts(
-                    run_id,
-                    self.worker_id,
-                    fence,
-                    parts=[part],
+            part["metadata"].update(operation_metadata(definition, None))
+            if replay_safe:
+                events = await self._db(
+                    lambda repo: repo.persist_tool_call_parts(
+                        run_id, self.worker_id, fence, parts=[part]
+                    )
                 )
-            )
+            else:
+                # Commit the existing no-replay boundary before any external IO.
+                # Recovery fails the Run if no receipt commits after this marker.
+                events = await self._db(
+                    lambda repo: repo.persist_ordinary_tool_batch(
+                        run_id,
+                        self.worker_id,
+                        fence,
+                        batch_id=call_context.batch_id,
+                        phase="executing",
+                        tool_calls=[pending["tool_call"]],
+                        parts=[part],
+                        tool_context_state=context.checkpoint_state,
+                    )
+                )
             for event in events:
                 await self._publish(run_id, event)
-            # Only handlers with durable idempotency opt into this path. A lost
-            # worker resumes this same operation before any new model inference.
-            for attempt in range(3):
+            attempts = 3 if replay_safe else 1
+            for attempt in range(attempts):
                 call_context.raise_if_cancelled()
                 try:
                     result = definition.validate_result(
@@ -130,7 +147,7 @@ class ApprovalRuntimeMixin:
                 except (TimeoutError, ConnectionError, OSError):
                     result = {
                         "ok": False,
-                        "retryable": True,
+                        "retryable": replay_safe,
                         "write_state": "unknown",
                         "message": "操作暂未完成，请稍后重试。",
                     }
@@ -142,11 +159,20 @@ class ApprovalRuntimeMixin:
                         "message": "操作未完成。",
                     }
                 if isinstance(result, ToolApproval):
+                    if not replay_safe:
+                        raise DomainError(
+                            "agent_approval_indeterminate",
+                            "不可重放的写工具执行后不能再次请求审批，请核实远端结果。",
+                        )
                     await self._pause_tool_approval(
                         run_id, fence, pending, result, messages, context
                     )
                     return None
-                if not isinstance(result, Mapping) or not result.get("retryable") or attempt == 2:
+                if (
+                    not isinstance(result, Mapping)
+                    or not result.get("retryable")
+                    or attempt == attempts - 1
+                ):
                     break
                 await asyncio.sleep(0.25 * (attempt + 1))
         else:
@@ -197,29 +223,54 @@ class ApprovalRuntimeMixin:
                 "content": self._serialize_tool_result(result),
             },
         ]
-        events = await self._db(
-            lambda repo: repo.persist_tool_call_parts(
-                run_id,
-                self.worker_id,
-                fence,
-                parts=[part],
-                usage=usage,
-                provider_messages=next_messages,
-                advance_safe_checkpoint=True,
-                complete_approval=True,
-                receipts=[
-                    {
-                        "call_id": pending["tool_call"]["id"],
-                        "tool_name": definition.name,
-                        "arguments": pending["arguments"],
-                        "result": result,
-                        "read_only": definition.read_only,
-                        "private_result": definition.private_result,
-                        "public_result": public_result,
-                    }
-                ],
-            )
+        no_replay_execution = (
+            pending.get("decision") == "approved" and pending.get("replay_safe") is False
         )
+        persist_options = dict(
+            parts=[part],
+            usage=usage,
+            provider_messages=next_messages,
+            complete_approval=True,
+            receipts=[
+                {
+                    "call_id": pending["tool_call"]["id"],
+                    "tool_name": definition.name,
+                    "arguments": pending["arguments"],
+                    "result": result,
+                    "read_only": definition.read_only,
+                    "private_result": definition.private_result,
+                    "public_result": public_result,
+                }
+            ],
+        )
+        if no_replay_execution:
+            events = await self._db(
+                lambda repo: repo.persist_ordinary_tool_batch(
+                    run_id,
+                    self.worker_id,
+                    fence,
+                    batch_id=f"approval-{pending['tool_call']['id']}",
+                    phase="completed",
+                    tool_calls=[pending["tool_call"]],
+                    tool_context_state=dict(
+                        repo.runtime_state(run_id, self.worker_id, fence)["checkpoint"].get(
+                            "tool_context_state"
+                        )
+                        or {}
+                    ),
+                    **persist_options,
+                )
+            )
+        else:
+            events = await self._db(
+                lambda repo: repo.persist_tool_call_parts(
+                    run_id,
+                    self.worker_id,
+                    fence,
+                    advance_safe_checkpoint=True,
+                    **persist_options,
+                )
+            )
         for event in events:
             await self._publish(run_id, event)
         return next_messages

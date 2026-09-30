@@ -12,7 +12,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import PaginatedRequestParams
 
-from app.agent.tools import ToolDefinition
+from app.agent.tools import ToolApproval, ToolDefinition
 from app.settings import AgentMcpServer
 
 
@@ -108,17 +108,44 @@ async def discover_mcp_tools(servers: tuple[AgentMcpServer, ...]) -> list[ToolDe
                     ),
                 }
 
+            async def prepare(
+                arguments, context, *, server_name=server.name, url=server.url, name=remote_name
+            ):
+                context.raise_if_cancelled()
+                return ToolApproval(
+                    query=(
+                        f"确认调用 MCP 写工具 {server_name}/{name}？\n"
+                        f"服务地址：{url}\n"
+                        f"参数：{json.dumps(arguments, ensure_ascii=False, sort_keys=True)}\n"
+                        "此操作可能修改远端数据；结果未知时不会自动重试。"
+                    ),
+                    # Bind approval to the configured destination across restarts.
+                    payload={"url": url, "name": name, "arguments": arguments},
+                )
+
+            async def execute(payload, context, *, url=server.url, name=remote_name, call=invoke):
+                if payload.get("url") != url or payload.get("name") != name:
+                    return {
+                        "ok": False,
+                        "write_state": "failed",
+                        "error": {"type": "McpTargetChanged", "message": "MCP target changed."},
+                    }
+                return await call(payload["arguments"], context)
+
+            options = dict(
+                name=local_name,
+                description=remote.description or f"MCP {server.name}: {remote_name}",
+                parameters=remote.inputSchema,
+                strict=False,
+                read_only=read_only,
+                group=f"MCP {server.name}",
+                keywords=(server.name, remote_name),
+            )
             definitions.append(
-                ToolDefinition(
-                    name=local_name,
-                    description=remote.description or f"MCP {server.name}: {remote_name}",
-                    parameters=remote.inputSchema,
-                    strict=False,
-                    handler=invoke,
-                    read_only=read_only,
-                    effect="read" if read_only else "write",
-                    group=f"MCP {server.name}",
-                    keywords=(server.name, remote_name),
+                ToolDefinition(handler=invoke, effect="read", **options)
+                if read_only
+                else ToolDefinition.approved(
+                    prepare=prepare, execute=execute, approval_replay_safe=False, **options
                 )
             )
     return definitions

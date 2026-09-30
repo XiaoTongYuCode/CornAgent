@@ -95,6 +95,10 @@ Question 与 checkpoint 保存同一计划、原 tool-call ID 和用户决定；
 用户选项和待执行决定在同一事务提交，恢复时先执行该操作，再请求模型，取消不执行操作。
 计划变化时重新询问，仍使用原 tool-call ID；瞬时错误最多尝试三次。只有保证同一 payload
 可幂等重放的 handler 才能注册审批恢复；普通工具的未知副作用批次仍禁止自动重放。
+审批工具可显式设置 `approval_replay_safe=False`，以复用普通工具批次的禁止重放标记。
+该模式执行最多一次、忽略自动重试请求；执行前标记与完成后的回执均由 PostgreSQL 保存。
+没有已提交完成标记的中断会以 `agent_tool_batch_indeterminate` 失败，不再次执行。
+MCP 写工具固定采用此模式，并在每次写操作前要求明确用户审批。
 
 升级前停止服务，执行 `uv run alembic upgrade head` 应用 `0004_tool_approvals`，再启动前后端。
 该迁移保留普通 ask_user 的调用唯一性，允许同一业务调用因计划变化产生多次审批。

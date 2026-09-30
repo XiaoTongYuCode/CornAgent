@@ -1,16 +1,21 @@
 import asyncio
 import json
 import time
+from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agent import mcp_bridge
 from app.agent.model import ModelStreamEvent
 from app.agent.runtime import AgentRuntime
 from app.agent.tools import ToolApproval, ToolDefinition, build_default_tool_catalog
 from app.main import create_app
 from app.persistence.models import AgentRun
+from app.settings import AgentMcpServer
 from tests.test_runtime import FakeAgentEventStream, FinalAgentModel
 
 """Approval is a durable tool continuation, independent of attachment semantics."""
@@ -206,6 +211,217 @@ def test_generic_tool_approval_resumes_original_call_before_model(client, case):
         assert parts[0].title == ("已取消操作" if case in {"cancel", "ignore"} else "已应用变更")
         with client.app.state.database.session_factory() as db:
             assert "pending_tool_approval" not in db.get(AgentRun, run_id).checkpoint
+    finally:
+        client.portal.call(runtime.close)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "approve",
+        "cancel",
+        "ignore",
+        "restart",
+        "target_changed",
+        "timeout",
+        "retryable",
+        "crash_before_call",
+        "crash_after_write",
+        "crash_before_receipt",
+        "mixed",
+    ],
+)
+def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case):
+    from sqlalchemy import select
+
+    from app.persistence.agent_runtime import AgentRepository
+    from app.persistence.models import AgentToolReceipt
+
+    calls, effects = [], []
+    interrupted = asyncio.Event()
+    original_persist = AgentRepository.persist_ordinary_tool_batch
+
+    def persist(repo, *args, **kwargs):
+        if case == "crash_before_receipt" and kwargs["phase"] == "completed":
+            raise asyncio.CancelledError
+        return original_persist(repo, *args, **kwargs)
+
+    monkeypatch.setattr(AgentRepository, "persist_ordinary_tool_batch", persist)
+
+    @asynccontextmanager
+    async def session(url):
+        class Remote:
+            async def list_tools(self):
+                return SimpleNamespace(
+                    tools=[
+                        SimpleNamespace(
+                            name="change",
+                            description="Change record",
+                            inputSchema={"type": "object"},
+                        )
+                    ],
+                    nextCursor=None,
+                )
+
+            async def call_tool(self, name, arguments):
+                # The no-replay marker must commit before the remote operation.
+                with client.app.state.database.session_factory() as db:
+                    run = db.get(AgentRun, run_id)
+                    assert run.checkpoint["ordinary_tool_batch"]["phase"] == "executing"
+                    assert run.checkpoint["pending_tool_approval"]["decision"] == "approved"
+                if case == "crash_before_call":
+                    interrupted.set()
+                    raise asyncio.CancelledError
+                calls.append((url, name, arguments))
+                effects.append(arguments)
+                if case == "crash_after_write":
+                    interrupted.set()
+                    raise asyncio.CancelledError
+                if case == "timeout":
+                    raise TimeoutError("remote may have committed")
+                if case == "crash_before_receipt":
+                    interrupted.set()
+                return SimpleNamespace(
+                    isError=False,
+                    content=[SimpleNamespace(type="text", text="done")],
+                    structuredContent=None,
+                )
+
+        yield Remote()
+
+    monkeypatch.setattr(mcp_bridge, "_session", session)
+
+    class Model:
+        def __init__(self):
+            self.requests = []
+
+        async def stream(self, messages):
+            self.requests.append(messages)
+            turn = len(self.requests)
+            call = {
+                "id": "mcp-change",
+                "name": "mcp_records_change",
+                "arguments": '{"target":"draft-1"}',
+            }
+            if turn == 1 or (case == "mixed" and turn == 2):
+                batch = [call]
+                if case == "mixed" and turn == 1:
+                    call["id"] = "mcp-invalid"
+                    batch.append({"id": "read", "name": "list_materials", "arguments": "{}"})
+                yield ModelStreamEvent(kind="tool_calls", tool_calls=batch)
+                return
+            result = json.loads(messages[-1]["content"])
+            assert messages[-1]["tool_call_id"] == "mcp-change"
+            if case in {"cancel", "ignore"}:
+                assert result["outcome"] == "cancelled"
+            elif case == "target_changed":
+                assert result["error"]["type"] == "McpTargetChanged"
+            else:
+                assert result["write_state"] == "unknown"
+            yield ModelStreamEvent(kind="content", content="已处理；未知结果需核实远端。")
+
+    model = Model()
+
+    def new_runtime(url="https://example.org/mcp"):
+        server = AgentMcpServer(name="records", url=url, tools=("change",), write_tools=("change",))
+        tool = client.portal.call(mcp_bridge.discover_mcp_tools, (server,))[0]
+        if case == "retryable":
+
+            async def execute(payload, context):
+                calls.append(payload)
+                return {"ok": False, "retryable": True, "write_state": "unknown"}
+
+            tool = replace(tool, approval_handler=execute)
+        runtime = AgentRuntime(
+            session_factory=client.app.state.database.session_factory,
+            redis_url=None,
+            model="fake",
+            api_key="test",
+            api_base=None,
+            model_timeout_seconds=30,
+            reconcile_seconds=60,
+            stream_max_events=100,
+            model_client=model,
+            event_stream=FakeAgentEventStream(),
+            tool_catalog=build_default_tool_catalog([tool]),
+        )
+        client.app.state.agent_runtime = runtime
+        client.portal.call(runtime.start)
+        return runtime
+
+    runtime = new_runtime()
+    try:
+        created = client.post(
+            "/api/v1/agent/sessions",
+            json={"content": "修改草稿"},
+            headers={"Idempotency-Key": "mcp-create"},
+        )
+        assert created.status_code == 200, created.text
+        run_id = created.json()["run"]["id"]
+        waiting = _wait_for_snapshot_status(client, runtime, run_id, "waiting_for_user")
+        assert calls == []
+        question = next(p for p in waiting.content_parts if p.kind == "user_question")
+        assert "draft-1" in question.content and "records/change" in question.content
+        if case in {"restart", "target_changed"}:
+            client.portal.call(runtime.close)
+            runtime = new_runtime(
+                "https://other.example.org/mcp"
+                if case == "target_changed"
+                else "https://example.org/mcp"
+            )
+        path = f"/api/v1/agent/questions/{question.metadata['question_id']}/respond"
+        assert (
+            client.post(
+                path,
+                json={"action": "answer", "content": "yes"},
+                headers={"Idempotency-Key": "mcp-free-text"},
+            ).status_code
+            == 422
+        )
+        decision = (
+            {"action": "cancel"}
+            if case == "ignore"
+            else {"action": "answer", "option_id": "option-2" if case == "cancel" else "option-1"}
+        )
+        for _ in range(2):
+            assert (
+                client.post(
+                    path, json=decision, headers={"Idempotency-Key": "mcp-answer"}
+                ).status_code
+                == 200
+            )
+        if case.startswith("crash_"):
+            client.portal.call(asyncio.wait_for, interrupted.wait(), 5)
+            client.portal.call(runtime.close)
+            with client.app.state.database.session_factory() as db:
+                db.get(AgentRun, run_id).lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+                db.commit()
+            runtime = new_runtime()
+            final = _wait_for_snapshot_status(client, runtime, run_id, "failed")
+            assert final.run.error_code == "agent_tool_batch_indeterminate"
+            operation = next(p for p in final.content_parts if p.kind == "tool_call")
+            assert operation.metadata["operation_outcome"]["state"] == "unknown"
+            assert len(model.requests) == 1
+            assert len(calls) == (0 if case == "crash_before_call" else 1)
+        else:
+            _wait_for_snapshot_status(client, runtime, run_id, "completed")
+            assert len(calls) == (0 if case in {"cancel", "ignore", "target_changed"} else 1)
+            assert len(model.requests) == (3 if case == "mixed" else 2)
+        with client.app.state.database.session_factory() as db:
+            stored = db.get(AgentRun, run_id)
+            receipts = db.scalars(
+                select(AgentToolReceipt).where(
+                    AgentToolReceipt.run_id == run_id, AgentToolReceipt.call_id == "mcp-change"
+                )
+            ).all()
+            if case.startswith("crash_"):
+                assert receipts == []
+                assert stored.checkpoint["ordinary_tool_batch"]["phase"] == "executing"
+            else:
+                assert len(receipts) == 1
+                assert "pending_tool_approval" not in stored.checkpoint
+                if case not in {"cancel", "ignore"}:
+                    assert stored.checkpoint["ordinary_tool_batch"]["phase"] == "completed"
     finally:
         client.portal.call(runtime.close)
 

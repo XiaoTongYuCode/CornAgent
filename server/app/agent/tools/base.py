@@ -115,6 +115,9 @@ class ToolDefinition:
     runtime_handler: str | None = None
     exclusive: bool = False
     approval_handler: ToolHandler | None = None
+    # Existing approval handlers promise durable idempotency. Set False for
+    # external writes that must never retry or resume after execution starts.
+    approval_replay_safe: bool = True
     arguments_model: type[BaseModel] | None = None
     result_model: type[BaseModel] | None = None
     result_presenter: ToolResultPresenter | None = None
@@ -141,8 +144,9 @@ class ToolDefinition:
     ) -> ToolDefinition:
         """Register a two-phase write tool with the durable approval path.
 
-        execute must make repeated calls with the same context.operation_id
-        safe. The runtime cannot make an external write exactly once.
+        By default execute promises durable idempotency using context.operation_id.
+        With approval_replay_safe=False, execution is attempted once and a lost
+        worker fails the Run without replaying the external write.
         """
 
         if "handler" in options or "approval_handler" in options or "effect" in options:

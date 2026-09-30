@@ -1548,6 +1548,7 @@ class AgentRepository:
         usage: dict[str, Any] | None = None,
         provider_messages: list[dict[str, Any]] | None = None,
         receipts: list[dict[str, Any]] | None = None,
+        complete_approval: bool = False,
     ) -> list[dict[str, Any]]:
         """Persist an ordinary-tool batch with an explicit crash-recovery boundary.
 
@@ -1579,6 +1580,8 @@ class AgentRepository:
             )
         if phase == "completed":
             self._persist_tool_receipts(run, parts, provider_messages, receipts)
+            if complete_approval:
+                checkpoint.pop("pending_tool_approval", None)
         for part in parts:
             if part.get("kind") != "tool_call":
                 raise ValueError("ordinary tool batches accept only tool_call parts.")

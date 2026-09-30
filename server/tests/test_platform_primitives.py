@@ -2,11 +2,15 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from mcp.types import ListToolsResult, Tool
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
 
 from app import platform_cli, telemetry
 from app.agent import mcp_bridge
@@ -175,7 +179,13 @@ def test_mcp_discovery_allowlist_and_failed_write_are_conservative(monkeypatch):
         tool.to_provider_tool()["function"].get("strict") is not True for tool in (read, write)
     )
     assert asyncio.run(read.handler({"id": 1}, ToolExecutionContext()))["content"] == ["found"]
-    outcome = asyncio.run(write.handler({"id": 1}, ToolExecutionContext()))
+    approval = asyncio.run(write.handler({"id": 1}, ToolExecutionContext()))
+    assert isinstance(approval, ToolApproval)
+    assert write.exclusive and write.runtime_handler == "tool_approval"
+    assert write.approval_replay_safe is False
+    assert calls == [("lookup", {"id": 1})]
+    assert '"id": 1' in approval.query and configured.url in approval.query
+    outcome = asyncio.run(write.approval_handler(approval.payload, ToolExecutionContext()))
     assert outcome["ok"] is False and outcome["write_state"] == "unknown"
     assert calls == [("lookup", {"id": 1}), ("change", {"id": 1})]
 
@@ -211,7 +221,8 @@ def test_mcp_successful_write_has_no_unverified_commit_receipt(monkeypatch):
         write_tools=("send",),
     )
     tool = asyncio.run(mcp_bridge.discover_mcp_tools((server,)))[0]
-    result = asyncio.run(tool.handler({}, ToolExecutionContext()))
+    approval = asyncio.run(tool.handler({}, ToolExecutionContext()))
+    result = asyncio.run(tool.approval_handler(approval.payload, ToolExecutionContext()))
     assert result["ok"] is True
     assert result["write_state"] == "unknown"
     assert "operation_receipt" not in result
@@ -331,18 +342,120 @@ def test_tracing_rejects_invalid_endpoint_before_installing_provider(monkeypatch
     ],
 )
 def test_tracing_accepts_https_and_local_http_endpoints(monkeypatch, endpoint):
-    provider, exporter, processor, install = Mock(), Mock(), Mock(), Mock()
+    exporter, processor = Mock(), Mock()
+    current = [trace.ProxyTracerProvider()]
+
+    def install(value):
+        current[0] = value
+
     monkeypatch.setattr(telemetry, "_tracing_configured", False)
-    monkeypatch.setattr(telemetry, "TracerProvider", provider)
+    monkeypatch.setattr(telemetry, "_tracing_endpoint", None)
+    monkeypatch.setattr(telemetry, "_tracing_provider", None)
+    monkeypatch.setattr(telemetry.trace, "get_tracer_provider", lambda: current[0])
+    # Use the real SDK class so the compatibility check is exercised.
+    monkeypatch.setattr(TracerProvider, "add_span_processor", Mock())
     monkeypatch.setattr(telemetry, "OTLPSpanExporter", exporter)
     monkeypatch.setattr(telemetry, "BatchSpanProcessor", processor)
     monkeypatch.setattr(telemetry.trace, "set_tracer_provider", install)
     telemetry.configure_tracing(endpoint)
     exporter.assert_called_once_with(endpoint=endpoint)
     processor.assert_called_once_with(exporter.return_value)
-    provider.return_value.add_span_processor.assert_called_once_with(processor.return_value)
-    install.assert_called_once_with(provider.return_value)
+    installed = current[0].add_span_processor.call_args.args[0]
+    assert installed._processor is processor.return_value
+    current[0].add_span_processor.assert_called_once()
     assert telemetry._tracing_configured is True
+    current[0].shutdown()
+
+
+def test_tracing_exports_on_existing_host_provider_once(monkeypatch):
+    spans, host_spans = [], []
+
+    class Exporter(SpanExporter):
+        def __init__(self, destination):
+            self.destination = destination
+
+        def export(self, batch):
+            self.destination.extend(batch)
+            return SpanExportResult.SUCCESS
+
+    provider = TracerProvider()
+    provider.add_span_processor(BatchSpanProcessor(Exporter(host_spans)))
+    factory = Mock(return_value=Exporter(spans))
+    monkeypatch.setattr(telemetry, "_tracing_configured", False)
+    monkeypatch.setattr(telemetry, "_tracing_endpoint", None)
+    monkeypatch.setattr(telemetry, "_tracing_provider", None)
+    monkeypatch.setattr(telemetry.trace, "get_tracer_provider", lambda: provider)
+    monkeypatch.setattr(telemetry, "OTLPSpanExporter", factory)
+    install = Mock()
+    monkeypatch.setattr(telemetry.trace, "set_tracer_provider", install)
+    try:
+        for _ in range(2):
+            telemetry.configure_tracing("https://example.org/v1/traces")
+        with provider.get_tracer("host.private").start_as_current_span(
+            "host.request", attributes={"private.prompt": "synthetic-private-prompt"}
+        ):
+            pass
+        with provider.get_tracer("cornagent.agent").start_as_current_span("agent.run"):
+            pass
+        provider.force_flush()
+        assert [span.name for span in spans] == ["agent.run"]
+        assert [span.name for span in host_spans] == ["host.request", "agent.run"]
+        assert host_spans[0].attributes["private.prompt"] == "synthetic-private-prompt"
+        factory.assert_called_once()
+        install.assert_not_called()
+        with pytest.raises(RuntimeError, match="another target"):
+            telemetry.configure_tracing("https://other.example.org/v1/traces")
+    finally:
+        provider.shutdown()
+
+
+@pytest.mark.parametrize("case", ["foreign", "installation_refused"])
+def test_tracing_fails_without_claiming_unusable_provider(monkeypatch, case):
+    provider = trace.NoOpTracerProvider() if case == "foreign" else trace.ProxyTracerProvider()
+    exporter = Mock()
+    monkeypatch.setattr(telemetry, "_tracing_configured", False)
+    monkeypatch.setattr(telemetry.trace, "get_tracer_provider", lambda: provider)
+    monkeypatch.setattr(telemetry.trace, "set_tracer_provider", Mock())
+    monkeypatch.setattr(telemetry, "OTLPSpanExporter", exporter)
+    with pytest.raises(RuntimeError):
+        telemetry.configure_tracing("https://example.org/v1/traces")
+    exporter.assert_not_called()
+    assert telemetry._tracing_configured is False
+
+
+def test_inspect_finds_old_expired_run_outside_recent_limit(settings, monkeypatch):
+    from app.database import Database
+    from app.persistence.agent_runtime import AgentRepository
+    from app.persistence.models import AgentRun
+    from app.persistence.scope import LOCAL_SCOPE
+
+    database = Database(settings)
+    now = datetime.now(UTC)
+    ids = []
+    try:
+        with database.session_factory() as db:
+            repo = AgentRepository(db)
+            for index, status in enumerate(("running", "running", "completed", "running")):
+                _, run = repo.create_session_run(
+                    LOCAL_SCOPE, content="inspect", idempotency_key=f"inspect-{index}"
+                )
+                stored = db.get(AgentRun, run.id)
+                stored.status = status
+                stored.created_at = now - timedelta(days=4 - index)
+                stored.lease_expires_at = (
+                    (now + timedelta(hours=1) if index == 1 else now - timedelta(hours=1))
+                    if index != 3
+                    else None
+                )
+                ids.append(run.id)
+                db.commit()
+        monkeypatch.setattr(platform_cli, "Settings", lambda: settings)
+        result = platform_cli.inspect_runtime(limit=1)
+        assert result["stale_leases"] == [ids[0]]
+        assert [run["id"] for run in result["recent_runs"]] == [ids[3]]
+        assert result["run_statuses"] == {"running": 1}
+    finally:
+        database.close()
 
 
 def test_app_uses_injected_durable_transaction_backend(settings):
