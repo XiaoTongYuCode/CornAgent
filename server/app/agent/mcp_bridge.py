@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
@@ -112,10 +113,12 @@ async def discover_mcp_tools(servers: tuple[AgentMcpServer, ...]) -> list[ToolDe
                 arguments, context, *, server_name=server.name, url=server.url, name=remote_name
             ):
                 context.raise_if_cancelled()
+                # Query authentication belongs only in the private execution payload.
+                public_url = urlsplit(url)._replace(query="", fragment="").geturl()
                 return ToolApproval(
                     query=(
                         f"确认调用 MCP 写工具 {server_name}/{name}？\n"
-                        f"服务地址：{url}\n"
+                        f"服务地址：{public_url}\n"
                         f"参数：{json.dumps(arguments, ensure_ascii=False, sort_keys=True)}\n"
                         "此操作可能修改远端数据；结果未知时不会自动重试。"
                     ),

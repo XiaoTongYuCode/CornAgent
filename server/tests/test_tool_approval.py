@@ -223,6 +223,7 @@ def test_generic_tool_approval_resumes_original_call_before_model(client, case):
         "ignore",
         "restart",
         "target_changed",
+        "url_query",
         "timeout",
         "retryable",
         "crash_before_call",
@@ -349,7 +350,10 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
         client.portal.call(runtime.start)
         return runtime
 
-    runtime = new_runtime()
+    initial_url = "https://example.org/mcp" + (
+        "?token=synthetic-server-secret" if case == "url_query" else ""
+    )
+    runtime = new_runtime(initial_url)
     try:
         created = client.post(
             "/api/v1/agent/sessions",
@@ -362,6 +366,15 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
         assert calls == []
         question = next(p for p in waiting.content_parts if p.kind == "user_question")
         assert "draft-1" in question.content and "records/change" in question.content
+        assert "synthetic-server-secret" not in waiting.model_dump_json()
+        if case == "url_query":
+            detail = client.get(f"/api/v1/agent/sessions/{created.json()['session']['id']}")
+            assert "synthetic-server-secret" not in detail.text
+            with client.app.state.database.session_factory() as db:
+                assert (
+                    db.get(AgentRun, run_id).checkpoint["pending_tool_approval"]["payload"]["url"]
+                    == initial_url
+                )
         if case in {"restart", "target_changed"}:
             client.portal.call(runtime.close)
             runtime = new_runtime(
@@ -406,6 +419,8 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
         else:
             _wait_for_snapshot_status(client, runtime, run_id, "completed")
             assert len(calls) == (0 if case in {"cancel", "ignore", "target_changed"} else 1)
+            if case == "url_query":
+                assert calls[0][0] == initial_url
             assert len(model.requests) == (3 if case == "mixed" else 2)
         with client.app.state.database.session_factory() as db:
             stored = db.get(AgentRun, run_id)

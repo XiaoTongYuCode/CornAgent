@@ -123,7 +123,8 @@ def test_mcp_discovery_reads_all_pages_before_validating_allowlist(monkeypatch, 
     assert sessions == [configured.url]
 
 
-def test_mcp_discovery_allowlist_and_failed_write_are_conservative(monkeypatch):
+@pytest.mark.parametrize("query", ["", "?token=synthetic-server-secret"])
+def test_mcp_discovery_allowlist_and_failed_write_are_conservative(monkeypatch, query):
     calls = []
 
     class FakeClient:
@@ -161,13 +162,13 @@ def test_mcp_discovery_allowlist_and_failed_write_are_conservative(monkeypatch):
 
     @asynccontextmanager
     async def session(url):
-        assert url == "http://localhost:9001/mcp"
+        assert url == "http://localhost:9001/mcp" + query
         yield FakeClient()
 
     monkeypatch.setattr(mcp_bridge, "_session", session)
     configured = AgentMcpServer(
         name="records",
-        url="http://localhost:9001/mcp",
+        url="http://localhost:9001/mcp" + query,
         tools=("lookup", "change"),
         read_only_tools=("lookup",),
         write_tools=("change",),
@@ -184,7 +185,9 @@ def test_mcp_discovery_allowlist_and_failed_write_are_conservative(monkeypatch):
     assert write.exclusive and write.runtime_handler == "tool_approval"
     assert write.approval_replay_safe is False
     assert calls == [("lookup", {"id": 1})]
-    assert '"id": 1' in approval.query and configured.url in approval.query
+    assert '"id": 1' in approval.query and "http://localhost:9001/mcp" in approval.query
+    assert "synthetic-server-secret" not in approval.query
+    assert approval.payload["url"] == configured.url
     outcome = asyncio.run(write.approval_handler(approval.payload, ToolExecutionContext()))
     assert outcome["ok"] is False and outcome["write_state"] == "unknown"
     assert calls == [("lookup", {"id": 1}), ("change", {"id": 1})]
@@ -454,6 +457,50 @@ def test_inspect_finds_old_expired_run_outside_recent_limit(settings, monkeypatc
         assert result["stale_leases"] == [ids[0]]
         assert [run["id"] for run in result["recent_runs"]] == [ids[3]]
         assert result["run_statuses"] == {"running": 1}
+    finally:
+        database.close()
+
+
+def test_inspect_counts_all_active_subtasks_over_1000(settings, monkeypatch):
+    from uuid import uuid4
+
+    from app.database import Database
+    from app.persistence.agent_runtime import AgentRepository
+    from app.persistence.models import AgentSubagentTask
+    from app.persistence.scope import LOCAL_SCOPE
+
+    database = Database(settings)
+    try:
+        with database.session_factory() as db:
+            _, run = AgentRepository(db).create_session_run(
+                LOCAL_SCOPE, content="inspect backlog", idempotency_key="inspect-backlog"
+            )
+            group_id = str(uuid4())
+            db.add_all(
+                [
+                    AgentSubagentTask(
+                        id=str(uuid4()),
+                        root_run_id=run.id,
+                        group_id=group_id,
+                        tool_call_id="backlog",
+                        task_key=f"task-{index}",
+                        ordinal=index,
+                        profile="researcher",
+                        task_payload={},
+                        status="queued"
+                        if index < 1001
+                        else "running"
+                        if index < 1010
+                        else "completed",
+                        deadline_at=datetime.now(UTC) + timedelta(hours=1),
+                        root_cancel_epoch=0,
+                    )
+                    for index in range(1011)
+                ]
+            )
+            db.commit()
+        monkeypatch.setattr(platform_cli, "Settings", lambda: settings)
+        assert platform_cli.inspect_runtime(1)["active_subtasks"] == {"queued": 1001, "running": 9}
     finally:
         database.close()
 

@@ -16,7 +16,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database import Database
 from app.persistence.models import AgentRun, AgentSubagentTask
@@ -39,12 +39,11 @@ def inspect_runtime(limit: int = 20) -> dict:
                     .order_by(AgentRun.lease_expires_at, AgentRun.id)
                 )
             )
-            tasks = db.scalars(
-                select(AgentSubagentTask)
+            active_tasks = db.execute(
+                select(AgentSubagentTask.status, func.count())
                 .where(AgentSubagentTask.status.in_(("queued", "running")))
-                .limit(1000)
-            )
-            active_tasks = list(tasks)
+                .group_by(AgentSubagentTask.status)
+            ).all()
             return {
                 "run_statuses": dict(Counter(run.status for run in recent)),
                 "stale_leases": stale_leases,
@@ -52,7 +51,7 @@ def inspect_runtime(limit: int = 20) -> dict:
                     {"id": run.id, "status": run.status, "error_code": run.error_code}
                     for run in recent
                 ],
-                "active_subtasks": dict(Counter(task.status for task in active_tasks)),
+                "active_subtasks": dict(active_tasks),
             }
     finally:
         database.close()
