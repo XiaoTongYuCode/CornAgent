@@ -20,7 +20,9 @@ def _apply_linux_limits() -> None:
     import resource
 
     resource.setrlimit(resource.RLIMIT_CPU, (15, 15))
-    resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+    # MarkItDown/Magika and PDFium map large virtual regions even for small
+    # PDFs. Bound the parser while allowing these maps (which are not RSS).
+    resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
     resource.setrlimit(resource.RLIMIT_FSIZE, (2 * 1024 * 1024, 2 * 1024 * 1024))
 
 

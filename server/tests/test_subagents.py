@@ -9,6 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -17,6 +18,7 @@ from sqlalchemy import select
 
 from app.agent.model import ModelStreamEvent
 from app.agent.subagents.protocol import SubagentOptions
+from app.agent.subagents.runtime import SubagentRuntime
 from app.agent.subagents.tools import build_subagent_orchestration_tools, parse_operation
 from app.agent.tool_executor import AgentToolExecutor
 from app.agent.tools import AgentToolCatalog, RuntimeToolCall, ToolExecutionContext
@@ -211,6 +213,64 @@ def test_complete_orchestration_with_shared_mock_tool(settings, delegate):
                 } <= set(calls)
         metrics = client.get("/metrics").text
         assert "cornagent_subagent_finished_total" in metrics
+
+
+@pytest.mark.parametrize("case", ["new", "replaced", "expired"])
+def test_reconciliation_only_cancels_claims_observed_before_live_query(case):
+    async def scenario():
+        entered, release = asyncio.Event(), asyncio.Event()
+        runtime = SubagentRuntime(
+            SimpleNamespace(worker_id="worker", max_concurrency=1), None, SubagentOptions()
+        )
+        worker = asyncio.create_task(asyncio.Event().wait())
+        runtime.tasks["child"] = worker
+        runtime.cancel_events["child"] = asyncio.Event()
+        if case != "new":
+            runtime.claims["child"] = {"fence": 1}
+
+        class Repository:
+            reading_live = False
+
+            def recover(self):
+                return []
+
+            def live_claims(self, _worker):
+                self.reading_live = True
+                return {}  # Snapshot before the new worker's claim commits.
+
+            def waiting_ids(self):
+                return []
+
+            def queued_ids(self, _limit):
+                return []
+
+        repository = Repository()
+
+        async def db(operation):
+            result = operation(repository)
+            if repository.reading_live:
+                repository.reading_live = False
+                entered.set()
+                await release.wait()
+            return result
+
+        runtime.db = db
+        reconcile = asyncio.create_task(runtime.reconcile_once())
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            if case != "expired":
+                runtime.claims["child"] = {"fence": 2}
+            release.set()
+            await reconcile
+            await asyncio.sleep(0)
+            assert worker.cancelled() == (case == "expired")
+            assert runtime.cancel_events["child"].is_set() == (case == "expired")
+        finally:
+            release.set()
+            await asyncio.gather(reconcile, return_exceptions=True)
+            await runtime.close()
+
+    asyncio.run(scenario())
 
 
 def test_guard_discards_uncollected_final_candidate(settings):
@@ -1021,8 +1081,12 @@ def test_production_child_adapter_uses_only_child_prompt_and_scoped_tools(settin
     assert [message["role"] for message in messages] == ["system", "user"]
     assert not any(message.get("content") == SYSTEM_PROMPT for message in messages)
     assert {tool["function"]["name"] for tool in requests[0]["tools"]} == {
-        "search_tools", "read_skill", "read_tool_result", "list_materials",
-        "search_materials", "read_material",
+        "search_tools",
+        "read_skill",
+        "read_tool_result",
+        "list_materials",
+        "search_materials",
+        "read_material",
     }
     assert runtime.model_client.system_prompt == SYSTEM_PROMPT
     asyncio.run(runtime.close())

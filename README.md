@@ -247,6 +247,7 @@ The detailed guides below are currently available in **Simplified Chinese**.
 | [Backend](server/README.md) | Service startup, dependencies, configuration, and checks |
 | [Architecture](docs/architecture.md) | Module responsibilities and request flow |
 | [Agent runtime](docs/runtime.md) | State machine, recovery, SSE, and message trees |
+| [Platform extensions](docs/platform-extensions.md) | Durable transactions, MCP, tracing, evaluations, and operator inspection |
 | [Subtasks and tools](docs/subagents.md) | Parallel tasks, tool extensions, and demos |
 | [File storage](docs/storage.md) | Attachment reads and writes, session isolation, and cleanup |
 | [Testing and verification](docs/verification.md) | Regression coverage and interface verification records |

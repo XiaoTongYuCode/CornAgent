@@ -76,6 +76,8 @@ Child 状态为 `queued → running → completed / needs_input / failed / timed
 
 Child 租约过期可在原截止时间内重新执行只读任务；旧 fence、过期租约或 Root cancel epoch 不匹配的结果被拒绝。Root 取消、失败、完成或会话删除会终止剩余任务；可选任务不会阻止最终回答，Root 完成时取消剩余可选任务。完成结果不重新运行。
 
+协调器只用数据库查询核对查询开始前观察到的 Child claim；查询期间新注册或替换的 worker 留待下一轮核对，避免旧快照误取消已取得新租约的任务。
+
 Root 从安全 checkpoint 回退半个模型轮次时，按任务标识重新合并数据库最新任务投影。完整结果入库不依赖 Root 草稿的剩余空间；后续交付若无法经历史压缩放入 checkpoint，将明确失败。详情见 [结果预算与工具协议](subagents.md)。
 
 ## 最终回答与事件一致性
@@ -95,6 +97,10 @@ Question 与 checkpoint 保存同一计划、原 tool-call ID 和用户决定；
 用户选项和待执行决定在同一事务提交，恢复时先执行该操作，再请求模型，取消不执行操作。
 计划变化时重新询问，仍使用原 tool-call ID；瞬时错误最多尝试三次。只有保证同一 payload
 可幂等重放的 handler 才能注册审批恢复；普通工具的未知副作用批次仍禁止自动重放。
+审批工具可显式设置 `approval_replay_safe=False`，以复用普通工具批次的禁止重放标记。
+该模式执行最多一次、忽略自动重试请求；执行前标记与完成后的回执均由 PostgreSQL 保存。
+没有已提交完成标记的中断会以 `agent_tool_batch_indeterminate` 失败，不再次执行。
+MCP 写工具固定采用此模式，并在每次写操作前要求明确用户审批。
 
 升级前停止服务，执行 `uv run alembic upgrade head` 应用 `0004_tool_approvals`，再启动前后端。
 该迁移保留普通 ask_user 的调用唯一性，允许同一业务调用因计划变化产生多次审批。

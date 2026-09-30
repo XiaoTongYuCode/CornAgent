@@ -13,11 +13,88 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import uuid4
 
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from sqlalchemy import delete
 
 from app.persistence.models import UsageEvent
 
 logger = logging.getLogger(__name__)
+_tracing_configured = False
+_tracing_endpoint: str | None = None
+_tracing_provider: TracerProvider | None = None
+_tracing_lock = threading.Lock()
+
+
+class _AgentSpanProcessor(SpanProcessor):
+    """Export only CornAgent spans when sharing a host's global provider."""
+
+    def __init__(self, exporter):
+        self._processor = BatchSpanProcessor(exporter)
+
+    def on_end(self, span):
+        scope = span.instrumentation_scope
+        if scope and scope.name == "cornagent.agent" and span.name in {"agent.run", "agent.tool"}:
+            self._processor.on_end(span)
+
+    def shutdown(self):
+        self._processor.shutdown()
+
+    def force_flush(self, timeout_millis=30000):
+        return self._processor.force_flush(timeout_millis)
+
+
+def configure_tracing(endpoint: str) -> None:
+    """Opt-in OTLP spans containing names/status only; never prompts or tool arguments."""
+
+    from urllib.parse import urlsplit
+
+    global _tracing_configured, _tracing_endpoint, _tracing_provider
+    target = urlsplit(endpoint)
+    if (
+        (
+            target.scheme != "https"
+            and not (target.scheme == "http" and target.hostname in {"127.0.0.1", "localhost"})
+        )
+        or not target.hostname
+        or target.username
+        or target.password
+        or target.fragment
+    ):
+        raise ValueError("OTLP tracing requires HTTPS or local HTTP without URL credentials")
+    with _tracing_lock:
+        provider = trace.get_tracer_provider()
+        if _tracing_configured:
+            if provider is not _tracing_provider or endpoint != _tracing_endpoint:
+                raise RuntimeError("CornAgent tracing is already configured with another target")
+            return
+        if isinstance(provider, trace.ProxyTracerProvider):
+            candidate = TracerProvider(resource=Resource.create({"service.name": "cornagent"}))
+            trace.set_tracer_provider(candidate)
+            provider = trace.get_tracer_provider()
+            if provider is not candidate:
+                candidate.shutdown()
+                raise RuntimeError("CornAgent could not install its tracer provider")
+        if not isinstance(provider, TracerProvider):
+            raise RuntimeError("CornAgent tracing requires an OpenTelemetry SDK TracerProvider")
+        # Keep the host's provider and resource; attach exactly one exporter to it.
+        exporter = OTLPSpanExporter(endpoint=endpoint)
+        try:
+            processor = _AgentSpanProcessor(exporter)
+        except Exception:
+            exporter.shutdown()
+            raise
+        try:
+            provider.add_span_processor(processor)
+        except Exception:
+            processor.shutdown()
+            raise
+        _tracing_provider = provider
+        _tracing_endpoint = endpoint
+        _tracing_configured = True
 
 
 @dataclass(frozen=True)
@@ -157,19 +234,28 @@ def _emit(kind, name, status, started, usage=None):
 
 
 async def tool_call(name, callback):
-    if _current.get() is None or name is None:
+    if name is None:
         return await callback()
-    started = time.monotonic()
-    status = "failed"
-    try:
-        result = await callback()
-        status = "failed" if isinstance(result, dict) and result.get("ok") is False else "completed"
-        return result
-    except asyncio.CancelledError:
-        status = "cancelled"
-        raise
-    finally:
-        emit("tool", name, status, started)
+    with trace.get_tracer("cornagent.agent").start_as_current_span(
+        "agent.tool",
+        attributes={"agent.tool.name": name},
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        started = time.monotonic()
+        status = "failed"
+        try:
+            result = await callback()
+            status = (
+                "failed" if isinstance(result, dict) and result.get("ok") is False else "completed"
+            )
+            return result
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
+        finally:
+            span.set_attribute("agent.tool.status", status)
+            emit("tool", name, status, started)
 
 
 async def completion(callback, **kwargs):

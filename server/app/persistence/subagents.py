@@ -28,8 +28,10 @@ from app.persistence.agent_runtime import (
     checkpoint_json_size_bytes,
     ensure_checkpoint_size,
 )
+from app.persistence.checkpoints import has_inflight_ordinary_tool_batch, ordinary_tool_batch_marker
 from app.persistence.errors import DomainError
 from app.persistence.models import AgentMessage, AgentRun, AgentSubagentTask
+from app.persistence.transitions import transition_run
 
 
 def utc(value: datetime) -> datetime:
@@ -150,19 +152,29 @@ def settle_root_children(db: Session, run: AgentRun) -> None:
     if run.status in TERMINAL_RUN_STATUSES and messages and messages[-1].get("tool_calls"):
         # A cancelled wait must not leave an unmatched provider tool call in
         # the next user turn's historical context.
+        marker = (
+            ordinary_tool_batch_marker(checkpoint)
+            if has_inflight_ordinary_tool_batch(checkpoint)
+            else None
+        )
+        indeterminate_ids = {call["id"] for call in (marker or {}).get("tool_calls", [])}
         for call in messages[-1]["tool_calls"]:
+            result = {"ok": False, "status": "cancelled", "reason": "parent_run_ended"}
+            if call["id"] in indeterminate_ids:
+                result.update(
+                    {
+                        "status": "indeterminate",
+                        "write_state": "unknown",
+                        "retryable": False,
+                        "message": "工具调用已中断，远端可能已执行；请核实结果，勿自动重试。",
+                    }
+                )
             messages.append(
                 {
                     "role": "tool",
                     "name": call["function"]["name"],
                     "tool_call_id": call["id"],
-                    "content": json.dumps(
-                        {
-                            "ok": False,
-                            "status": "cancelled",
-                            "reason": "parent_run_ended",
-                        }
-                    ),
+                    "content": json.dumps(result),
                 }
             )
         checkpoint["provider_messages"] = messages
@@ -466,7 +478,7 @@ class SubagentRepository:
         root.checkpoint_revision += 1
         root.provider_usage = _merge_usage(root.provider_usage, usage)
         if active_wait:
-            root.status = "waiting_for_subagents"
+            transition_run(root, "waiting_for_subagents")
             root.lease_owner = None
             root.lease_expires_at = None
         assistant = self.db.get(AgentMessage, root.assistant_message_id)
@@ -628,7 +640,7 @@ class SubagentRepository:
                 "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
             },
         ]
-        root.status = "pending"
+        transition_run(root, "pending")
         root.stream_epoch += 1
         root.next_sequence = 1
         return self._save(

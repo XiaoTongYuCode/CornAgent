@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "name": "指定字符串",
+      "prompt": "请只输出字符串 CORNAGENT_EVAL_OK，不要添加其他内容。",
+      "contains": ["CORNAGENT_EVAL_OK"]
+    }
+  ]
+}

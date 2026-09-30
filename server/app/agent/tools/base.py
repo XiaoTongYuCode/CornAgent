@@ -72,6 +72,14 @@ class ToolExecutionContext:
         if self.cancelled:
             raise asyncio.CancelledError
 
+    @property
+    def operation_id(self) -> str:
+        """Stable key for a tool invocation across approval and worker restarts."""
+
+        if not self.run_id or not self.tool_call_id:
+            raise ValueError("A tool invocation needs a Run and tool-call ID.")
+        return f"{self.run_id}:{self.tool_call_id}"
+
     def for_tool(self, *, tool_call_id: str, batch_id: str) -> ToolExecutionContext:
         """Create a call view while sharing Run-scoped mutable state and cache."""
 
@@ -107,6 +115,9 @@ class ToolDefinition:
     runtime_handler: str | None = None
     exclusive: bool = False
     approval_handler: ToolHandler | None = None
+    # Existing approval handlers promise durable idempotency. Set False for
+    # external writes that must never retry or resume after execution starts.
+    approval_replay_safe: bool = True
     arguments_model: type[BaseModel] | None = None
     result_model: type[BaseModel] | None = None
     result_presenter: ToolResultPresenter | None = None
@@ -119,6 +130,38 @@ class ToolDefinition:
     keywords: tuple[str, ...] = ()
     effect: Literal["read", "write", "control"] | None = None
     outcome_projector: ToolOutcomeProjector | None = None
+
+    @classmethod
+    def approved(
+        cls,
+        *,
+        name: str,
+        description: str,
+        parameters: Mapping[str, Any],
+        prepare: ToolHandler,
+        execute: ToolHandler,
+        **options: Any,
+    ) -> ToolDefinition:
+        """Register a two-phase write tool with the durable approval path.
+
+        By default execute promises durable idempotency using context.operation_id.
+        With approval_replay_safe=False, execution is attempted once and a lost
+        worker fails the Run without replaying the external write.
+        """
+
+        if "handler" in options or "approval_handler" in options or "effect" in options:
+            raise ValueError("Approval handlers and effect are set by ToolDefinition.approved.")
+        if options.get("read_only"):
+            raise ValueError("Approved write tools cannot be read-only.")
+        return cls(
+            name=name,
+            description=description,
+            parameters=parameters,
+            handler=prepare,
+            approval_handler=execute,
+            effect="write",
+            **options,
+        )
 
     def __post_init__(self) -> None:
         if self.private_result and (not self.read_only or self.effect == "write"):
