@@ -188,6 +188,25 @@ def _upsert_part(parts: list[dict[str, Any]], part: dict[str, Any]) -> list[dict
     return updated
 
 
+def _indeterminate_tool_parts(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Settle interrupted tool display state without claiming the remote write failed."""
+    terminal_parts = []
+    for part in parts:
+        item = dict(part)
+        metadata = dict(item.get("metadata", {}))
+        if item.get("kind") == "tool_call" and metadata.get("status") == "running":
+            metadata.update(
+                {
+                    "status": "failed",
+                    "failed": True,
+                    "error_code": "agent_tool_batch_indeterminate",
+                }
+            )
+            item["metadata"] = metadata
+        terminal_parts.append(item)
+    return terminal_parts
+
+
 def _merge_usage(current: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
     merged = dict(current)
     for key, value in update.items():
@@ -2050,6 +2069,12 @@ class AgentRepository:
         run.lease_owner = None
         run.lease_expires_at = None
         checkpoint = dict(run.checkpoint)
+        if has_inflight_ordinary_tool_batch(checkpoint):
+            # Cancellation cannot revoke external IO already admitted. Keep the
+            # no-replay marker and unknown outcome, but persist terminal parts
+            # in the same transaction as the Run and its conversation history.
+            run.content_parts = _indeterminate_tool_parts(run.content_parts)
+            checkpoint["content_parts"] = run.content_parts
         checkpoint["cancel_idempotency_key"] = idempotency_key
         checkpoint["cancel_request_hash"] = cancel_hash
         run.checkpoint = checkpoint
@@ -2094,20 +2119,7 @@ class AgentRepository:
             if has_inflight_ordinary_tool_batch(checkpoint):
                 marker = ordinary_tool_batch_marker(checkpoint) or {}
                 batch_id = str(marker.get("batch_id", "unknown"))
-                terminal_parts: list[dict[str, Any]] = []
-                for part in run.content_parts:
-                    item = dict(part)
-                    metadata = dict(item.get("metadata", {}))
-                    if item.get("kind") == "tool_call" and metadata.get("status") == "running":
-                        metadata.update(
-                            {
-                                "status": "failed",
-                                "failed": True,
-                                "error_code": "agent_tool_batch_indeterminate",
-                            }
-                        )
-                        item["metadata"] = metadata
-                    terminal_parts.append(item)
+                terminal_parts = _indeterminate_tool_parts(run.content_parts)
                 run.content_parts = terminal_parts
                 transition_run(run, "failed")
                 run.error_code = "agent_tool_batch_indeterminate"

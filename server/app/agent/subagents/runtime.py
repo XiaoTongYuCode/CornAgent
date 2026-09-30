@@ -201,8 +201,13 @@ class SubagentRuntime:
             for event in events:
                 await self.root._publish(root_id, event)
             self.root.metrics.increment("cornagent_subagent_recoveries_total")
+        # New claims can commit while the database snapshot is being read.
+        # Only compare workers already observed before that query began.
+        observed_claims = dict(self.claims)
         live = await self.db(lambda repo: repo.live_claims(self.root.worker_id))
-        for task_id, claim in list(self.claims.items()):
+        for task_id, claim in observed_claims.items():
+            if self.claims.get(task_id) is not claim:
+                continue
             if live.get(task_id) != claim["fence"] and task_id in self.tasks:
                 self.cancel_events[task_id].set()
                 self.tasks[task_id].cancel()

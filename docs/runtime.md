@@ -76,6 +76,8 @@ Child 状态为 `queued → running → completed / needs_input / failed / timed
 
 Child 租约过期可在原截止时间内重新执行只读任务；旧 fence、过期租约或 Root cancel epoch 不匹配的结果被拒绝。Root 取消、失败、完成或会话删除会终止剩余任务；可选任务不会阻止最终回答，Root 完成时取消剩余可选任务。完成结果不重新运行。
 
+协调器只用数据库查询核对查询开始前观察到的 Child claim；查询期间新注册或替换的 worker 留待下一轮核对，避免旧快照误取消已取得新租约的任务。
+
 Root 从安全 checkpoint 回退半个模型轮次时，按任务标识重新合并数据库最新任务投影。完整结果入库不依赖 Root 草稿的剩余空间；后续交付若无法经历史压缩放入 checkpoint，将明确失败。详情见 [结果预算与工具协议](subagents.md)。
 
 ## 最终回答与事件一致性

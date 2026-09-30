@@ -229,6 +229,8 @@ def test_generic_tool_approval_resumes_original_call_before_model(client, case):
         "crash_before_call",
         "crash_after_write",
         "crash_before_receipt",
+        "run_cancel_before_write",
+        "run_cancel_after_write",
         "mixed",
     ],
 )
@@ -240,6 +242,7 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
 
     calls, effects = [], []
     interrupted = asyncio.Event()
+    release_remote = asyncio.Event()
     original_persist = AgentRepository.persist_ordinary_tool_batch
 
     def persist(repo, *args, **kwargs):
@@ -273,8 +276,14 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
                 if case == "crash_before_call":
                     interrupted.set()
                     raise asyncio.CancelledError
+                if case == "run_cancel_before_write":
+                    interrupted.set()
+                    await release_remote.wait()
                 calls.append((url, name, arguments))
                 effects.append(arguments)
+                if case == "run_cancel_after_write":
+                    interrupted.set()
+                    await release_remote.wait()
                 if case == "crash_after_write":
                     interrupted.set()
                     raise asyncio.CancelledError
@@ -403,7 +412,42 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
                 ).status_code
                 == 200
             )
-        if case.startswith("crash_"):
+        if case.startswith("run_cancel_"):
+            client.portal.call(asyncio.wait_for, interrupted.wait(), 5)
+            cancel_path = f"/api/v1/agent/runs/{run_id}/cancel"
+            for _ in range(2):
+                response = client.post(cancel_path, headers={"Idempotency-Key": "mcp-stop"})
+                assert response.status_code == 200, response.text
+            final = _wait_for_snapshot_status(client, runtime, run_id, "cancelled")
+            operation = next(p for p in final.content_parts if p.kind == "tool_call")
+            assert operation.metadata["status"] == "failed"
+            assert operation.metadata["error_code"] == "agent_tool_batch_indeterminate"
+            assert operation.metadata["operation_outcome"]["state"] == "unknown"
+            # Both reconnecting SSE and persisted conversation history are terminal.
+            stream = client.get(f"/api/v1/agent/runs/{run_id}/stream")
+            snapshot = json.loads(
+                next(line[6:] for line in stream.text.splitlines() if line.startswith("data: "))
+            )
+            assert snapshot["content_parts"] == final.model_dump(mode="json")["content_parts"]
+            detail = client.get(f"/api/v1/agent/sessions/{created.json()['session']['id']}").json()
+            assistant = next(
+                m for m in detail["messages"] if m["id"] == final.run.assistant_message_id
+            )
+            assert assistant["content_parts"] == snapshot["content_parts"]
+            with client.app.state.database.session_factory() as db:
+                assert AgentRepository(db).recover() == []
+            assert len(calls) == (0 if case == "run_cancel_before_write" else 1)
+            # An admitted remote call can still finish after cancellation; its
+            # late return must not change the terminal snapshot or create a receipt.
+            client.portal.call(release_remote.set)
+            client.portal.call(runtime.close)
+            runtime = new_runtime()
+            restored = _wait_for_snapshot_status(client, runtime, run_id, "cancelled")
+            assert restored.content_parts == final.content_parts
+            assert len(model.requests) == 1
+            assert len(calls) == 1
+            assert len(effects) == len(calls)
+        elif case.startswith("crash_"):
             client.portal.call(asyncio.wait_for, interrupted.wait(), 5)
             client.portal.call(runtime.close)
             with client.app.state.database.session_factory() as db:
@@ -429,15 +473,27 @@ def test_mcp_write_requires_approval_and_never_replays(client, monkeypatch, case
                     AgentToolReceipt.run_id == run_id, AgentToolReceipt.call_id == "mcp-change"
                 )
             ).all()
-            if case.startswith("crash_"):
+            if case.startswith(("crash_", "run_cancel_")):
                 assert receipts == []
                 assert stored.checkpoint["ordinary_tool_batch"]["phase"] == "executing"
+                provider_result = next(
+                    m
+                    for m in stored.checkpoint["provider_messages"]
+                    if m.get("role") == "tool" and m.get("tool_call_id") == "mcp-change"
+                )
+                assert json.loads(provider_result["content"])["write_state"] == "unknown"
+                assert provider_result in AgentRepository(db)._provider_lineage(
+                    stored.assistant_message_id
+                )
+                if case.startswith("run_cancel_"):
+                    assert stored.checkpoint["content_parts"] == stored.content_parts
             else:
                 assert len(receipts) == 1
                 assert "pending_tool_approval" not in stored.checkpoint
                 if case not in {"cancel", "ignore"}:
                     assert stored.checkpoint["ordinary_tool_batch"]["phase"] == "completed"
     finally:
+        client.portal.call(release_remote.set)
         client.portal.call(runtime.close)
 
 

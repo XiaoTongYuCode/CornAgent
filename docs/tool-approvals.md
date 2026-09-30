@@ -49,6 +49,9 @@ tool = ToolDefinition(
 - 不能保证幂等重放的外部写工具必须设置 `approval_replay_safe=False`。此时不自动重试，
   执行前提交禁止重放标记；结果及回执与标记完成、审批清理同事务提交。执行开始后失去
   worker 而没有已提交结果时，Run 以 `agent_tool_batch_indeterminate` 失败，需核实外部结果。
+  执行中取消 Run 时，同一取消事务把工具状态终结为 failed，保留 unknown 结果和禁止重放
+  标记；SSE snapshot、会话历史与重启后的状态一致。取消不能证明远端未执行操作。
+  下一轮模型历史的终结工具消息同样保留 unknown，并明确要求人工核实、禁止自动重试。
   该模式的 execute 不能返回新的 `ToolApproval`；新的计划必须在只读 prepare 阶段完成。
 - 结果必须可 JSON 序列化且有界。私有计划只存于服务端；不要把密钥或无关数据放进 payload。
 - 运行时保留原始 tool-call ID，批准后无需模型重新生成调用。结果和 checkpoint 清理原子提交，
