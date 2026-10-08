@@ -293,14 +293,24 @@ html.agent-panel-resizing .agent-drawer { transition: none; }
 .nav-chat-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 864px) {
-  .agent-panel.agent-drawer { position: fixed; inset: 0; z-index: 320; width: 100vw !important; min-width: 0; height: 100dvh; margin-right: 0; border-left: 0; transform: translateX(100%); transition: transform var(--panel-close-dur) var(--panel-ease); }
+  .agent-panel.agent-drawer { position: fixed; inset: 0; z-index: 320; width: 100vw !important; min-width: 0; height: var(--agent-viewport-height, 100dvh); margin-right: 0; border-left: 0; transform: translateX(100%); transition: transform var(--panel-close-dur) var(--panel-ease); }
+  .agent-chat-page { height: var(--agent-viewport-height, 100%); grid-template-columns: minmax(0, 1fr); }
+  .agent-conversation { --agent-input-max-height: 100cqh; container-type: size; grid-template-columns: minmax(0, 1fr); }
   .agent-panel.agent-drawer[data-open="true"] { transform: translateX(0); transition-duration: var(--panel-open-dur); }
   .agent-panel-resize-handle { display: none; }
   .agent-panel-header { padding-top: env(safe-area-inset-top); min-height: calc(49px + env(safe-area-inset-top)); }
   .agent-chat-header { padding-left: 58px; }
   .chat-message-list { --turn-top-space: 24px; width: 100%; padding: var(--turn-top-space) 14px var(--turn-bottom-space); }
   .chat-message-list__user-title-row { max-width: 90%; }
-  .agent-new-conversation { width: calc(100% - 32px); justify-content: flex-start; padding-top: 64px; }
+  .agent-new-conversation { width: calc(100% - 32px); justify-content: flex-end; padding: 24px 0 max(12px, env(safe-area-inset-bottom)); }
+  .agent-new-conversation > .project-introduction.project-introduction--compact { margin-top: 0; }
+  @container (max-height: 480px) {
+    .agent-new-conversation > .project-introduction--compact { display: none; }
+  }
+  @container (max-height: 240px) {
+    .agent-new-conversation { padding-top: 0; gap: 0; }
+    .agent-new-conversation__title { display: none; }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -381,7 +391,7 @@ html.agent-panel-resizing .agent-drawer { transition: none; }
 .agent-input-editing { width: min(692px, calc(100% - 52px)); margin: 0 auto; display: flex; justify-content: space-between; font-size: 12px; }
 .file-format-icon { display: inline-flex; flex-shrink: 0; }
 
-.agent-conversation:not(.agent-conversation--empty) > .agent-conversation-input { grid-row: 3; min-width: 0; min-height: 0; display: flex; flex-direction: column; max-height: 75cqh; }
+.agent-conversation:not(.agent-conversation--empty) > .agent-conversation-input { grid-row: 3; min-width: 0; min-height: 0; display: flex; flex-direction: column; max-height: var(--agent-input-max-height, 75cqh); }
 .agent-conversation-input > .agent-question-composer { flex: 0 1 auto; }
 .agent-conversation-controls > .agent-conversation-prompt { flex-shrink: 0; position: relative; }
 

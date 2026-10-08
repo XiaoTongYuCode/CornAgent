@@ -93,7 +93,7 @@ npm run build
 
 `chat/MessageActions.tsx` 统一复制按钮、图标按钮与版本切换；`chat/UserMessage.tsx` 管理编辑草稿；`chat/useMessageAction.ts` 统一操作失败提示和重复提交保护。完整页与侧栏直接复用这些组件。
 
-聊天输入组件统一使用 14px 文字。聚焦边框使用独立的蓝色 `--composer-focus`，不跟随黑白主按钮颜色。`AgentConversation` 在当前会话生成结束、输入框恢复可用后自动聚焦一次，连续发送无需再次点击输入框；聊天页与侧栏共用该行为。聚焦使用 `preventScroll`，不会打断会话滚动；等待操作完成后再执行，切换会话时清除上一会话的待聚焦状态。
+聊天输入组件桌面使用 14px 文字，手机使用 16px 避免 iOS 聚焦自动放大；手机采用圆角输入框、左侧加号附件与右侧模型和发送操作。聊天页和侧栏随 `visualViewport` 高度变化保持输入框可见，保留手势缩放；短屏隐藏新对话的介绍与问候，长输入在框内滚动。聚焦边框使用独立的蓝色 `--composer-focus`，不跟随黑白主按钮颜色。`AgentConversation` 在当前会话生成结束、输入框恢复可用后自动聚焦一次，连续发送无需再次点击输入框；聊天页与侧栏共用该行为。聚焦使用 `preventScroll`，不会打断会话滚动；等待操作完成后再执行，切换会话时清除上一会话的待聚焦状态。
 
 AI 回复完成且正文包含 🎉 时，调用 `agentCelebration.ts` 播放庆祝动画。效果采用 canvas-confetti 的 [Realistic Look](https://www.kirilv.com/canvas-confetti/#realistic)，从左右边缘同时朝中上方喷射，每侧 200 个粒子分为五组，混合扩散角度、初速度、阻力与大小；遵守系统减少动态效果偏好。
 

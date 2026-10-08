@@ -1,6 +1,6 @@
 import { Tooltip } from 'antd';
 import { useI18n } from '../../i18n';
-import { ArrowUp, Paperclip, Square } from 'lucide-react';
+import { ArrowUp, Paperclip, Plus, Square } from 'lucide-react';
 import {
   forwardRef,
   useLayoutEffect,
@@ -121,14 +121,52 @@ export const PromptPanel = forwardRef<HTMLTextAreaElement, PromptPanelProps>(
     const hasSubmitLabel = Boolean(submitLabel.trim());
 
     useLayoutEffect(() => {
-      const input = textareaRef.current;
-      if (!input) return;
-      if (minimal) {
-        input.style.height = '24px';
-        return;
-      }
-      input.style.height = 'auto';
-      input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+      const host = textareaRef.current?.closest<HTMLElement>(
+        '.agent-chat-page, .agent-drawer',
+      );
+      const viewport = window.visualViewport;
+      if (!host || !viewport) return;
+      const mobile = window.matchMedia('(max-width: 864px)');
+      const sync = () => {
+        if (!mobile.matches || viewport.scale !== 1) {
+          host.style.removeProperty('--agent-viewport-height');
+          return;
+        }
+        host.style.setProperty(
+          '--agent-viewport-height',
+          `${Math.max(0, Math.min(window.innerHeight, viewport.height + viewport.offsetTop) - host.getBoundingClientRect().top)}px`,
+        );
+      };
+      sync();
+      viewport.addEventListener('resize', sync);
+      viewport.addEventListener('scroll', sync);
+      mobile.addEventListener('change', sync);
+      return () => {
+        viewport.removeEventListener('resize', sync);
+        viewport.removeEventListener('scroll', sync);
+        mobile.removeEventListener('change', sync);
+        host.style.removeProperty('--agent-viewport-height');
+      };
+    }, []);
+
+    useLayoutEffect(() => {
+      const resize = () => {
+        const input = textareaRef.current;
+        if (!input) return;
+        if (minimal) {
+          input.style.height = '24px';
+          return;
+        }
+        input.style.height =
+          window.matchMedia('(max-width: 864px)').matches &&
+          input.closest('.agent-conversation-prompt')
+            ? '0px'
+            : 'auto';
+        input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+      };
+      resize();
+      window.addEventListener('resize', resize);
+      return () => window.removeEventListener('resize', resize);
     }, [minimal, prompt]);
 
     const setPrompt = (nextPrompt: string) => {
@@ -274,7 +312,8 @@ export const PromptPanel = forwardRef<HTMLTextAreaElement, PromptPanelProps>(
                         title={t('addFiles')}
                         type="button"
                       >
-                        <Paperclip size={16} aria-hidden="true" />
+                        <Paperclip className="prompt-panel__attach-icon" size={16} aria-hidden="true" />
+                        <Plus className="prompt-panel__add-icon" size={22} aria-hidden="true" />
                       </button>
                     </>
                   )}
