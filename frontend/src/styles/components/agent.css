@@ -293,8 +293,8 @@ html.agent-panel-resizing .agent-drawer { transition: none; }
 .nav-chat-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 864px) {
-  .agent-panel.agent-drawer { position: fixed; inset: 0; z-index: 320; width: 100vw !important; min-width: 0; height: var(--agent-viewport-height, 100dvh); margin-right: 0; border-left: 0; transform: translateX(100%); transition: transform var(--panel-close-dur) var(--panel-ease); }
-  .agent-chat-page { height: var(--agent-viewport-height, 100%); grid-template-columns: minmax(0, 1fr); }
+  .agent-panel.agent-drawer { position: fixed; inset: var(--agent-viewport-top, 0) 0 auto; z-index: 320; width: 100vw !important; min-width: 0; height: var(--agent-viewport-height, 100dvh); margin-right: 0; border-left: 0; transform: translateX(100%); transition: transform var(--panel-close-dur) var(--panel-ease); }
+  .agent-chat-page { position: fixed; inset: var(--agent-viewport-top, 0) 0 auto; height: var(--agent-viewport-height, 100dvh); grid-template-columns: minmax(0, 1fr); }
   .agent-conversation { --agent-input-max-height: 100cqh; container-type: size; grid-template-columns: minmax(0, 1fr); }
   .agent-panel.agent-drawer[data-open="true"] { transform: translateX(0); transition-duration: var(--panel-open-dur); }
   .agent-panel-resize-handle { display: none; }

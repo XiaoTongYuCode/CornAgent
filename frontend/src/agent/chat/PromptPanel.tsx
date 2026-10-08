@@ -130,22 +130,30 @@ export const PromptPanel = forwardRef<HTMLTextAreaElement, PromptPanelProps>(
       const sync = () => {
         if (!mobile.matches || viewport.scale !== 1) {
           host.style.removeProperty('--agent-viewport-height');
+          host.style.removeProperty('--agent-viewport-top');
           return;
         }
+        // iOS 聚焦会平移文档；固定宿主只跟随可视区域，不把文档位移计入高度。
         host.style.setProperty(
           '--agent-viewport-height',
-          `${Math.max(0, Math.min(window.innerHeight, viewport.height + viewport.offsetTop) - host.getBoundingClientRect().top)}px`,
+          `${viewport.height}px`,
         );
+        host.style.setProperty('--agent-viewport-top', `${viewport.offsetTop}px`);
       };
       sync();
       viewport.addEventListener('resize', sync);
       viewport.addEventListener('scroll', sync);
+      window.addEventListener('resize', sync);
+      window.addEventListener('scroll', sync);
       mobile.addEventListener('change', sync);
       return () => {
         viewport.removeEventListener('resize', sync);
         viewport.removeEventListener('scroll', sync);
+        window.removeEventListener('resize', sync);
+        window.removeEventListener('scroll', sync);
         mobile.removeEventListener('change', sync);
         host.style.removeProperty('--agent-viewport-height');
+        host.style.removeProperty('--agent-viewport-top');
       };
     }, []);
 

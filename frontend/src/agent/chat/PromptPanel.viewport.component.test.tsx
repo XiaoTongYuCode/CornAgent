@@ -12,7 +12,6 @@ it.each(['agent-chat-page', 'agent-drawer'])(
     const mobile = Object.assign(new EventTarget(), { matches: true })
     vi.stubGlobal('visualViewport', viewport)
     vi.spyOn(window, 'matchMedia').mockReturnValue(mobile as unknown as MediaQueryList)
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 60, 393, 700))
     const view = render(
       <div className={className}>
         <PromptPanel className="agent-conversation-prompt" onStartResearch={() => {}} />
@@ -20,32 +19,53 @@ it.each(['agent-chat-page', 'agent-drawer'])(
     )
     const host = view.container.querySelector<HTMLElement>(`.${className}`)!
     const height = () => host.style.getPropertyValue('--agent-viewport-height')
-    expect(height()).toBe('640px')
+    const top = () => host.style.getPropertyValue('--agent-viewport-top')
+    expect(height()).toBe('700px')
+    expect(top()).toBe('0px')
+
+    // iOS 聚焦会平移文档，失焦后仍可能保留该滚动位置。
+    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, -320, 393, 700))
+    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(320)
 
     viewport.height = 340
     viewport.dispatchEvent(new Event('resize'))
-    expect(height()).toBe('280px')
+    expect(height()).toBe('340px')
     viewport.offsetTop = 24
     viewport.dispatchEvent(new Event('scroll'))
-    expect(height()).toBe('304px')
+    expect(height()).toBe('340px')
+    expect(top()).toBe('24px')
+
+    viewport.height = 360
+    window.dispatchEvent(new Event('resize'))
+    expect(height()).toBe('360px')
+    viewport.offsetTop = 0
+    window.dispatchEvent(new Event('scroll'))
+    expect(top()).toBe('0px')
 
     viewport.scale = 1.5
     viewport.dispatchEvent(new Event('resize'))
     expect(height()).toBe('')
+    expect(top()).toBe('')
     viewport.scale = 1
     mobile.matches = false
     mobile.dispatchEvent(new Event('change'))
     expect(height()).toBe('')
+    expect(top()).toBe('')
 
     mobile.matches = true
     viewport.height = 700
     viewport.offsetTop = 0
     viewport.dispatchEvent(new Event('resize'))
-    expect(height()).toBe('640px')
+    expect(height()).toBe('700px')
+    expect(top()).toBe('0px')
     view.unmount()
     expect(height()).toBe('')
+    expect(top()).toBe('')
     viewport.dispatchEvent(new Event('resize'))
+    window.dispatchEvent(new Event('resize'))
+    window.dispatchEvent(new Event('scroll'))
     expect(height()).toBe('')
+    expect(top()).toBe('')
   },
 )
 
