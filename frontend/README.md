@@ -97,6 +97,13 @@ npm run build
 
 AI 回复完成且正文包含 🎉 时，调用 `agentCelebration.ts` 播放庆祝动画。效果采用 canvas-confetti 的 [Realistic Look](https://www.kirilv.com/canvas-confetti/#realistic)，从左右边缘同时朝中上方喷射，每侧 200 个粒子分为五组，混合扩散角度、初速度、阻力与大小；遵守系统减少动态效果偏好。
 
+移动 Safari（含 iPad 桌面模式）的原生聚焦滚动可能先于 `visualViewport.offsetTop` 更新。
+`PromptPanel` 统一为固定定位的聊天页和侧栏宿主同步写入 CSS 视口变量：Safari 顶部补偿取 `window.scrollY`，
+其他浏览器继续取 `offsetTop`；高度始终取 `visualViewport.height`，不随键盘动画切换到 `innerHeight`。
+根滚动事件中的写入必须在当前回调完成，不延后到下一动画帧；此处直接更新样式，无需 React `flushSync`。
+组件回归覆盖偏移迟到、键盘收起的反向延迟、草稿与选区、中文输入、缩放及卸载清理。
+涉及该逻辑的改动还需在 iPhone Safari 软件键盘展开、收起、再次聚焦和旋转期间检查实际位置；桌面 WebKit 仿真不能代替真机验收。
+
 ## 子任务投影
 
 子任务复用 `tool_call`，通过 `SubagentTaskMetadata` 与稳定部件标识整体更新；`waiting_for_subagents` 仍是可停止的活跃 Run。聊天页与侧边栏共用任务分组、标题、可展开摘要和配色组件；不显示子任务状态徽标与详情行；模拟搜索标题明确标记模拟数据。只翻译状态与标签，保留模型任务标题和结果原文。历史与 SSE 共用相同快照，无独立 Child 聊天接口；协议与演示见 [子任务说明](../docs/subagents.md)。

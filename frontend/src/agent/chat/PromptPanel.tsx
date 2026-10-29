@@ -127,18 +127,25 @@ export const PromptPanel = forwardRef<HTMLTextAreaElement, PromptPanelProps>(
       const viewport = window.visualViewport;
       if (!host || !viewport) return;
       const mobile = window.matchMedia('(max-width: 864px)');
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const iosSafari = ios && /Version\/[\d.]+.*Safari\//.test(navigator.userAgent) &&
+        !/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
       const sync = () => {
         if (!mobile.matches || viewport.scale !== 1) {
           host.style.removeProperty('--agent-viewport-height');
           host.style.removeProperty('--agent-viewport-top');
           return;
         }
-        // iOS 聚焦会平移文档；固定宿主只跟随可视区域，不把文档位移计入高度。
+        // Safari 原生聚焦滚动先于 offsetTop 更新，收起键盘时也有反向延迟。
+        // 直接同步写入 CSS，在当前事件中补偿固定宿主，不能延后到下一帧。
+        // 高度始终使用视觉视口，避免键盘动画中切换到 innerHeight 再次跳跃。
+        const top = iosSafari ? window.scrollY : viewport.offsetTop;
         host.style.setProperty(
           '--agent-viewport-height',
           `${viewport.height}px`,
         );
-        host.style.setProperty('--agent-viewport-top', `${viewport.offsetTop}px`);
+        host.style.setProperty('--agent-viewport-top', `${top}px`);
       };
       sync();
       viewport.addEventListener('resize', sync);
